@@ -16,6 +16,13 @@ pub enum TokenKind {
 
     Assign,
     Plus,
+    Minus,
+    Bang,
+    Asterisk,
+    Slash,
+
+    LessThan,
+    GreaterThan,
 
     Comma,
     Semicolon,
@@ -46,6 +53,20 @@ impl Display for TokenKind {
             TokenKind::Rbraces => write!(f, "}}"),
             TokenKind::Rparen => write!(f, ")"),
             TokenKind::Semicolon => write!(f, ";"),
+            TokenKind::Minus => write!(f, "-"),
+            TokenKind::Bang => write!(f, "!"),
+            TokenKind::Asterisk => write!(f, "*"),
+            TokenKind::Slash => write!(f, "/"),
+            TokenKind::LessThan => write!(f, "<"),
+            TokenKind::GreaterThan => write!(f, ">"),
         }
+    }
+}
+
+pub fn lookup_ident(ident : &String) -> TokenKind {
+    match ident.as_str(){
+        "fn" => TokenKind::Function,
+        "let" => TokenKind::Let,
+        _ => TokenKind::Ident,
     }
 }
