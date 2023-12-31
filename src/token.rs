@@ -21,6 +21,8 @@ pub enum TokenKind {
     Asterisk,
     Slash,
 
+    Equal,
+    NotEqual,
     LessThan,
     GreaterThan,
 
@@ -34,6 +36,13 @@ pub enum TokenKind {
 
     Function,
     Let,
+    True,
+    False,
+    If,
+    Else,
+    Return,
+
+    Exit,
 }
 
 impl Display for TokenKind {
@@ -59,14 +68,29 @@ impl Display for TokenKind {
             TokenKind::Slash => write!(f, "/"),
             TokenKind::LessThan => write!(f, "<"),
             TokenKind::GreaterThan => write!(f, ">"),
+            TokenKind::True => write!(f, "true"),
+            TokenKind::False => write!(f, "false"),
+            TokenKind::If => write!(f, "if"),
+            TokenKind::Else => write!(f, "else"),
+            TokenKind::Return => write!(f, "return"),
+            TokenKind::Equal => write!(f, "=="),
+            TokenKind::NotEqual => write!(f, "!="),
+
+            TokenKind::Exit => write!(f, "\0"),
         }
     }
 }
 
-pub fn lookup_ident(ident : &String) -> TokenKind {
-    match ident.as_str(){
+pub fn lookup_ident(ident: &String) -> TokenKind {
+    match ident.as_str() {
         "fn" => TokenKind::Function,
         "let" => TokenKind::Let,
+        "if" => TokenKind::If,
+        "else" => TokenKind::Else,
+        "true" => TokenKind::True,
+        "false" => TokenKind::False,
+        "return" => TokenKind::Return,
+        "Exit" => TokenKind::Exit,
         _ => TokenKind::Ident,
     }
 }
