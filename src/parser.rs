@@ -1,4 +1,8 @@
-use crate::{ast::Program, lexer::Lexer, token::Token};
+use crate::{
+    ast::{Identifier, LetStatement, Program, StatementNode},
+    lexer::Lexer,
+    token::{Token, TokenKind},
+};
 
 pub struct Parser {
     lexer: Lexer,
@@ -26,14 +30,73 @@ impl Parser {
     }
 
     pub fn parse_program(&mut self) -> Option<Program> {
-        None
+        let mut program = Program { statements: vec![] };
+
+        while self.current_token.kind != TokenKind::Eof {
+            if let Some(statement) = self.parse_statement() {
+                program.statements.push(statement);
+            }
+
+            self.next_token();
+        }
+
+        Some(program)
+    }
+
+    fn parse_statement(&mut self) -> Option<StatementNode> {
+        match self.current_token.kind {
+            TokenKind::Let => self.parse_let_statement(),
+            _ => None,
+        }
+    }
+
+    fn parse_let_statement(&mut self) -> Option<StatementNode> {
+        let mut stmt: LetStatement = LetStatement {
+            token: self.current_token.clone(),
+            name: Default::default(),
+            value: Default::default(),
+        };
+
+        return if !self.expect_peek(TokenKind::Ident) {
+            None
+        } else {
+            stmt.name = Identifier {
+                token: self.current_token.clone(),
+                value: self.current_token.literal.clone(),
+            };
+
+            if !self.expect_peek(TokenKind::Assign) {
+                None
+            } else {
+                self.next_token();
+                while !self.current_token_is(TokenKind::Semicolon) {
+                    self.next_token();
+                }
+
+                Some(StatementNode::Let(stmt))
+            }
+        };
+    }
+
+    fn expect_peek(&mut self, kind: TokenKind) -> bool {
+        if self.peek_token_is(kind) {
+            self.next_token();
+            return true;
+        }
+        false
+    }
+
+    fn peek_token_is(&self, kind: TokenKind) -> bool {
+        self.peek_token.kind == kind
+    }
+
+    fn current_token_is(&self, kind: TokenKind) -> bool {
+        self.current_token.kind == kind
     }
 }
 
 #[cfg(test)]
 mod test {
-    use std::io::ErrorKind::Other;
-
     use crate::{
         ast::{Node, StatementNode},
         lexer::Lexer,
