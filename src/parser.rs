@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Identifier, LetStatement, Program, StatementNode},
+    ast::{Identifier, LetStatement, Program, ReturnStatement, StatementNode},
     lexer::Lexer,
     token::{Token, TokenKind},
 };
@@ -8,6 +8,7 @@ pub struct Parser {
     lexer: Lexer,
     current_token: Token,
     peek_token: Token,
+    errors: Vec<String>,
 }
 
 impl Parser {
@@ -16,6 +17,7 @@ impl Parser {
             lexer,
             current_token: Default::default(),
             peek_token: Default::default(),
+            errors: vec![],
         };
 
         parser.next_token();
@@ -32,7 +34,7 @@ impl Parser {
     pub fn parse_program(&mut self) -> Option<Program> {
         let mut program = Program { statements: vec![] };
 
-        while self.current_token.kind != TokenKind::Eof {
+        while !self.current_token_is(TokenKind::Eof) {
             if let Some(statement) = self.parse_statement() {
                 program.statements.push(statement);
             }
@@ -46,6 +48,7 @@ impl Parser {
     fn parse_statement(&mut self) -> Option<StatementNode> {
         match self.current_token.kind {
             TokenKind::Let => self.parse_let_statement(),
+            TokenKind::Return => self.parse_return_statement(),
             _ => None,
         }
     }
@@ -65,10 +68,12 @@ impl Parser {
                 value: self.current_token.literal.clone(),
             };
 
+            // TODO add asignation to 0
             if !self.expect_peek(TokenKind::Assign) {
                 None
             } else {
                 self.next_token();
+                // TODO need to parse expression
                 while !self.current_token_is(TokenKind::Semicolon) {
                     self.next_token();
                 }
@@ -79,10 +84,11 @@ impl Parser {
     }
 
     fn expect_peek(&mut self, kind: TokenKind) -> bool {
-        if self.peek_token_is(kind) {
+        if self.peek_token_is(kind.clone()) {
             self.next_token();
             return true;
         }
+        self.peek_error(kind);
         false
     }
 
@@ -92,6 +98,34 @@ impl Parser {
 
     fn current_token_is(&self, kind: TokenKind) -> bool {
         self.current_token.kind == kind
+    }
+
+    pub fn errors(&self) -> &Vec<String> {
+        &self.errors
+    }
+
+    fn peek_error(&mut self, token_kind: TokenKind) {
+        let msg = format!(
+            "expected next token to be '{}', got '{}' instead",
+            token_kind, self.peek_token.kind,
+        );
+
+        self.errors.push(msg);
+    }
+
+    fn parse_return_statement(&mut self) -> Option<StatementNode> {
+        let stmt = ReturnStatement {
+            token: self.current_token.clone(),
+            ret_value: Default::default(),
+        };
+
+        self.next_token();
+
+        while !self.current_token_is(TokenKind::Semicolon) {
+            self.next_token();
+        }
+
+        Some(StatementNode::Return(stmt))
     }
 }
 
@@ -114,6 +148,8 @@ mod test {
         let lexer = Lexer::new(input);
         let mut parser = Parser::new(lexer);
         let program = parser.parse_program();
+
+        check_parser_erors(parser);
 
         match program {
             None => panic!("parse program should not be none"),
@@ -158,6 +194,61 @@ mod test {
                     expected,
                     stm.name.token_literal()
                 )
+            }
+            _ => panic!("not a let statement"),
+        }
+    }
+
+    fn check_parser_erors(parser: Parser) {
+        let errors = parser.errors();
+
+        if errors.len() == 0 {
+            return;
+        }
+
+        for error in errors {
+            eprintln!("parser error: {}", error);
+        }
+
+        panic!("parser error present");
+    }
+
+    #[test]
+    fn test_return_statements() {
+        let input = r#"
+        return 5;
+        return 10;
+        return 992395;
+        "#;
+
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+        check_parser_erors(parser);
+
+        match program {
+            None => panic!("parse program should not be none"),
+            Some(program) => {
+                assert_eq!(
+                    program.statements.len(),
+                    3,
+                    "statements does not contain 3 statements: got: {}",
+                    program.statements.len()
+                );
+
+                for stmt in program.statements {
+                    match stmt {
+                        StatementNode::Return(stm) => {
+                            assert_eq!(
+                                stm.token_literal(),
+                                "return",
+                                "token literal not 'return', got = '{}'",
+                                stm.token_literal()
+                            )
+                        }
+                        _ => panic!("not a return statement"),
+                    }
+                }
             }
         }
     }
