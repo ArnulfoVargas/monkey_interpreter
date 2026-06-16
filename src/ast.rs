@@ -9,9 +9,10 @@ pub trait Node {
 pub enum StatementNode {
     Let(LetStatement),
     Return(ReturnStatement),
+    Expression(ExpressionStatement),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ExpressionNode {
     IdentifierNode(Identifier),
 }
@@ -21,6 +22,7 @@ impl Node for StatementNode {
         match self {
             Self::Let(stmt) => stmt.token_literal(),
             Self::Return(stmt) => stmt.token_literal(),
+            Self::Expression(stmt) => stmt.token_literal(),
         }
     }
 
@@ -28,6 +30,7 @@ impl Node for StatementNode {
         match self {
             Self::Let(stmt) => stmt.print_string(),
             Self::Return(stmt) => stmt.print_string(),
+            Self::Expression(stmt) => stmt.print_string(),
         }
     }
 }
@@ -56,6 +59,7 @@ impl Node for Program {
             match &self.statements[0] {
                 StatementNode::Let(stmt) => stmt.token_literal(),
                 StatementNode::Return(stmt) => stmt.token_literal(),
+                StatementNode::Expression(stmt) => stmt.token_literal(),
             }
         } else {
             String::from("")
@@ -96,12 +100,13 @@ impl Node for LetStatement {
         if let Some(value) = &self.value {
             out.push_str(value.print_string().as_str());
         }
+        out.push_str(";");
 
         out
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Identifier {
     pub token: Token,
     pub value: String,
@@ -129,6 +134,77 @@ impl Node for ReturnStatement {
     }
 
     fn print_string(&self) -> String {
-        todo!()
+        let mut out = String::from("");
+
+        out.push_str(self.token_literal().as_str());
+        out.push_str(" ");
+
+        if let Some(val) = &self.ret_value {
+            out.push_str(val.print_string().as_str());
+        }
+
+        out.push_str(";");
+
+        out
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct ExpressionStatement {
+    pub token: Token,
+    pub expression: Option<ExpressionNode>,
+}
+
+impl Node for ExpressionStatement {
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    fn print_string(&self) -> String {
+        if let Some(exp) = &self.expression {
+            return exp.print_string();
+        }
+
+        String::from("")
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        ast::{ExpressionNode, Identifier, LetStatement, Node, Program, StatementNode},
+        token::{Token, TokenKind},
+    };
+    #[test]
+    fn test_print_string() {
+        let program = Program {
+            statements: vec![StatementNode::Let(LetStatement {
+                token: Token {
+                    kind: TokenKind::Let,
+                    literal: String::from("let"),
+                },
+                name: Identifier {
+                    token: Token {
+                        kind: TokenKind::Ident,
+                        literal: String::from("myVar"),
+                    },
+                    value: String::from("myVar"),
+                },
+                value: Some(ExpressionNode::IdentifierNode(Identifier {
+                    token: Token {
+                        kind: TokenKind::Ident,
+                        literal: String::from("anotherVar"),
+                    },
+                    value: String::from("anotherVar"),
+                })),
+            })],
+        };
+
+        assert_eq!(
+            program.print_string(),
+            String::from("let myVar = anotherVar;"),
+            "print string wrong. got = {}",
+            program.print_string()
+        )
     }
 }
