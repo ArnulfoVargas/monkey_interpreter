@@ -5,11 +5,12 @@ pub trait Node {
     fn print_string(&self) -> String;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum StatementNode {
     Let(LetStatement),
     Return(ReturnStatement),
     Expression(ExpressionStatement),
+    Block(BlockStatement),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -21,6 +22,7 @@ pub enum ExpressionNode {
     Prefix(PrefixExpression),
     Infix(InfixExpression),
     BooleanNode(Boolean),
+    If(IfExpression),
 }
 
 impl Node for StatementNode {
@@ -29,6 +31,7 @@ impl Node for StatementNode {
             Self::Let(stmt) => stmt.token_literal(),
             Self::Return(stmt) => stmt.token_literal(),
             Self::Expression(stmt) => stmt.token_literal(),
+            Self::Block(stmt) => stmt.token_literal(),
         }
     }
 
@@ -37,6 +40,7 @@ impl Node for StatementNode {
             Self::Let(stmt) => stmt.print_string(),
             Self::Return(stmt) => stmt.print_string(),
             Self::Expression(stmt) => stmt.print_string(),
+            Self::Block(stmt) => stmt.print_string(),
         }
     }
 }
@@ -49,6 +53,7 @@ impl Node for ExpressionNode {
             Self::Prefix(ident) => ident.token_literal(),
             Self::Infix(ident) => ident.token_literal(),
             Self::BooleanNode(ident) => ident.token_literal(),
+            Self::If(ident) => ident.token_literal(),
             Self::None => String::from(""),
         }
     }
@@ -60,6 +65,7 @@ impl Node for ExpressionNode {
             Self::Prefix(ident) => ident.print_string(),
             Self::Infix(ident) => ident.print_string(),
             Self::BooleanNode(ident) => ident.print_string(),
+            Self::If(ident) => ident.print_string(),
             Self::None => String::from(""),
         }
     }
@@ -76,6 +82,7 @@ impl Node for Program {
                 StatementNode::Let(stmt) => stmt.token_literal(),
                 StatementNode::Return(stmt) => stmt.token_literal(),
                 StatementNode::Expression(stmt) => stmt.token_literal(),
+                StatementNode::Block(stmt) => stmt.token_literal(),
             }
         } else {
             String::from("")
@@ -93,7 +100,7 @@ impl Node for Program {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LetStatement {
     pub token: Token,
     pub name: Identifier,
@@ -138,7 +145,7 @@ impl Node for Identifier {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ReturnStatement {
     pub token: Token,
     pub ret_value: Option<ExpressionNode>,
@@ -165,7 +172,7 @@ impl Node for ReturnStatement {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ExpressionStatement {
     pub token: Token,
     pub expression: Option<ExpressionNode>,
@@ -264,6 +271,58 @@ impl Node for Boolean {
 
     fn print_string(&self) -> String {
         self.token_literal()
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct IfExpression {
+    pub token: Token,
+    pub condition: Box<ExpressionNode>,
+    pub consequence: BlockStatement,
+    pub alternative: Option<BlockStatement>,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct BlockStatement {
+    pub token: Token,
+    pub statements: Vec<StatementNode>,
+}
+
+impl Node for IfExpression {
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    fn print_string(&self) -> String {
+        let mut out = String::from("");
+
+        out.push_str("if");
+        out.push_str(self.condition.print_string().as_str());
+        out.push_str(" ");
+        out.push_str(self.consequence.print_string().as_str());
+
+        if let Some(alt) = &self.alternative {
+            out.push_str("else ");
+            out.push_str(alt.print_string().as_str());
+        }
+
+        out
+    }
+}
+
+impl Node for BlockStatement {
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    fn print_string(&self) -> String {
+        let mut out = String::from("");
+
+        for stmt in &self.statements {
+            out.push_str(stmt.print_string().as_str());
+        }
+
+        out
     }
 }
 

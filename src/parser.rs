@@ -2,8 +2,9 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        Boolean, ExpressionNode, ExpressionStatement, Identifier, InfixExpression, IntegerLiteral,
-        LetStatement, PrefixExpression, Program, ReturnStatement, StatementNode,
+        BlockStatement, Boolean, ExpressionNode, ExpressionStatement, Identifier, IfExpression,
+        InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, Program, ReturnStatement,
+        StatementNode,
     },
     lexer::Lexer,
     token::{
@@ -67,6 +68,7 @@ impl Parser {
         parser.register_prefix(TokenKind::True, Self::parse_boolean);
         parser.register_prefix(TokenKind::False, Self::parse_boolean);
         parser.register_prefix(TokenKind::Lparen, Self::parse_grouped_expression);
+        parser.register_prefix(TokenKind::If, Self::parse_if_expression);
 
         parser.register_infix(TokenKind::Plus, Self::parse_infix_expression);
         parser.register_infix(TokenKind::Minus, Self::parse_infix_expression);
@@ -163,6 +165,67 @@ impl Parser {
         }
 
         exp
+    }
+
+    fn parse_if_expression(&mut self) -> Option<ExpressionNode> {
+        let mut expression = IfExpression {
+            token: self.current_token.clone(),
+            condition: Default::default(),
+            consequence: Default::default(),
+            alternative: None,
+        };
+
+        if !self.expect_peek(TokenKind::Lparen) {
+            return None;
+        }
+
+        self.next_token();
+        expression.condition = Box::new(
+            self.parse_expression(PrecedenceLevel::Lowest)
+                .expect("error parsing condition"),
+        );
+
+        if !self.expect_peek(TokenKind::Rparen) {
+            return None;
+        }
+
+        if !self.expect_peek(TokenKind::Lbraces) {
+            return None;
+        }
+
+        expression.consequence = self.parse_block_statement();
+
+        if self.peek_token_is(TokenKind::Else) {
+            self.next_token();
+
+            if !self.expect_peek(TokenKind::Lbraces) {
+                return None;
+            }
+
+            expression.alternative = Some(self.parse_block_statement());
+        }
+
+        Some(ExpressionNode::If(expression))
+    }
+
+    fn parse_block_statement(&mut self) -> BlockStatement {
+        let mut block = BlockStatement {
+            token: self.current_token.clone(),
+            statements: vec![],
+        };
+
+        self.next_token();
+
+        while !self.current_token_is(TokenKind::Rbraces) && !self.current_token_is(TokenKind::Eof) {
+            let stmt = self.parse_statement();
+
+            if let Some(stm) = stmt {
+                block.statements.push(stm);
+            }
+            self.next_token();
+        }
+
+        block
     }
 
     fn next_token(&mut self) {
@@ -325,6 +388,7 @@ impl Parser {
 
 #[cfg(test)]
 mod test {
+    use core::panic;
     use std::any;
 
     use crate::{
@@ -829,6 +893,136 @@ mod test {
                     idx, other
                 ),
             }
+        }
+    }
+
+    #[test]
+    fn test_if_expression() {
+        let input = "if (x < y) { x }";
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program().unwrap();
+
+        check_parser_erors(parser);
+
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "statements does not contain {} statements. got = {}",
+            1,
+            program.statements.len()
+        );
+
+        match &program.statements[0] {
+            StatementNode::Expression(if_stmt) => match if_stmt.expression.as_ref().unwrap() {
+                ExpressionNode::If(if_exp) => {
+                    test_infix_expression(
+                        &if_exp.condition,
+                        Box::new("x"),
+                        String::from("<"),
+                        Box::new("y"),
+                    );
+
+                    assert_eq!(
+                        if_exp.consequence.statements.len(),
+                        1,
+                        "consequence is not {} statement. got = {}",
+                        1,
+                        if_exp.consequence.statements.len()
+                    );
+
+                    match &if_exp.consequence.statements[0] {
+                        StatementNode::Expression(consequence) => {
+                            test_identifier(
+                                consequence
+                                    .expression
+                                    .as_ref()
+                                    .expect("error parsing consequence"),
+                                String::from("x"),
+                            );
+                        }
+                        other => panic!("statement is not ExpressionStatement. got = {:?}", other),
+                    }
+
+                    assert!(if_exp.alternative.is_none());
+                }
+                other => panic!("Expression is not IfExpression. got = {:?}", other),
+            },
+            other => panic!("statement is not an ExpressionStatement. got = {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_if_else_expression() {
+        let input = "if (x < y) { x } else { y }";
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program().unwrap();
+
+        check_parser_erors(parser);
+
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "statements does not contain {} statements. got = {}",
+            1,
+            program.statements.len()
+        );
+
+        match &program.statements[0] {
+            StatementNode::Expression(if_stmt) => match if_stmt.expression.as_ref().unwrap() {
+                ExpressionNode::If(if_exp) => {
+                    test_infix_expression(
+                        &if_exp.condition,
+                        Box::new("x"),
+                        String::from("<"),
+                        Box::new("y"),
+                    );
+
+                    assert_eq!(
+                        if_exp.consequence.statements.len(),
+                        1,
+                        "consequence is not {} statement. got = {}",
+                        1,
+                        if_exp.consequence.statements.len()
+                    );
+
+                    assert_eq!(
+                        if_exp.alternative.as_ref().unwrap().statements.len(),
+                        1,
+                        "consequence is not {} statement. got = {}",
+                        1,
+                        if_exp.alternative.as_ref().unwrap().statements.len()
+                    );
+
+                    match &if_exp.consequence.statements[0] {
+                        StatementNode::Expression(consequence) => {
+                            test_identifier(
+                                consequence
+                                    .expression
+                                    .as_ref()
+                                    .expect("error parsing consequence"),
+                                String::from("x"),
+                            );
+                        }
+                        other => panic!("statement is not ExpressionStatement. got = {:?}", other),
+                    }
+
+                    assert!(if_exp.alternative.is_some());
+
+                    match &if_exp.alternative.as_ref().unwrap().statements[0] {
+                        StatementNode::Expression(alt) => {
+                            test_identifier(
+                                alt.expression.as_ref().expect("error parsing alternate"),
+                                String::from("y"),
+                            );
+                        }
+                        other => panic!("statement is not ExpressionStatement. got = {:?}", other),
+                    }
+                }
+                other => panic!("Expression is not IfExpression. got = {:?}", other),
+            },
+            other => panic!("statement is not an ExpressionStatement. got = {:?}", other),
         }
     }
 }
