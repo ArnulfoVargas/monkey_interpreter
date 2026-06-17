@@ -1,6 +1,8 @@
+use std::ops::Deref;
+
 use crate::{
     ast::{BlockStatement, ExpressionNode, Identifier, IfExpression, Program, StatementNode},
-    object::{Environment, Object},
+    object::{Environment, Function, Object},
 };
 
 const TRUE: Object = Object::Boolean(true);
@@ -94,12 +96,81 @@ impl Evaluator {
                 }
                 ExpressionNode::If(expr) => self.eval_if_expression(expr),
                 ExpressionNode::IdentifierNode(ident) => self.eval_identifier(ident),
+                ExpressionNode::Funcion(func) => Object::Function(Function {
+                    parameters: func.parameters,
+                    body: func.body,
+                    env: self.env.clone(),
+                }),
+                ExpressionNode::Call(call) => {
+                    let func = self.eval_expression(Some(call.function.deref().clone()));
+
+                    if Self::is_error(&func) {
+                        return func;
+                    }
+
+                    let args = self.eval_expressions(call.arguments);
+
+                    if args.len() == 1 && Self::is_error(&args[0]) {
+                        return args[0].clone();
+                    }
+
+                    self.apply_function(func, args)
+                }
 
                 _ => NULL,
             };
         }
 
         Object::Null
+    }
+
+    fn apply_function(&mut self, func: Object, args: Vec<Object>) -> Object {
+        return match func {
+            Object::Function(func) => {
+                let old_env = self.env.clone();
+                let ext_env = self.extended_function_env(func.clone(), args);
+
+                self.env = ext_env;
+                let eval = self.eval_block_statement(func.body);
+
+                self.env = old_env;
+                return Self::unwrap_retrun_value(eval);
+            }
+            other => Object::Error(format!("not a function: {}", other)),
+        };
+    }
+
+    fn unwrap_retrun_value(obj: Object) -> Object {
+        return match obj {
+            Object::ReturnValue(val) => *val,
+            _ => obj,
+        };
+    }
+
+    fn extended_function_env(&mut self, func: Function, args: Vec<Object>) -> Environment {
+        let mut env = Environment::new_enclosed_environment(Box::new(func.env));
+
+        for (idx, param) in func.parameters.into_iter().enumerate() {
+            env.set(param.value, args[idx].clone());
+        }
+
+        env
+    }
+
+    fn eval_expressions(&mut self, expressions: Vec<ExpressionNode>) -> Vec<Object> {
+        let mut result = vec![];
+
+        for exp in expressions {
+            let eval = self.eval_expression(Some(exp));
+
+            if Self::is_error(&eval) {
+                return vec![eval];
+            }
+
+            result.push(eval);
+        }
+
+        result
     }
 
     fn eval_identifier(&self, identifier: Identifier) -> Object {
@@ -241,7 +312,7 @@ impl Evaluator {
 #[cfg(test)]
 mod text {
     use super::*;
-    use crate::{lexer::Lexer, object::Object, parser::Parser};
+    use crate::{ast::Node, lexer::Lexer, object::Object, parser::Parser};
 
     #[test]
     fn test_eval_integer_expr() {
@@ -401,7 +472,7 @@ mod text {
             let evaluated = test_eval(test.0);
             match evaluated {
                 Object::Error(err) => assert_eq!(err, test.1),
-                other => panic!("no error object returned. got={:?}", other),
+                other => panic!("no error object returned. got = {:?}", other),
             }
         }
     }
@@ -418,6 +489,52 @@ mod text {
         for test in tests {
             let (input, value) = test;
             test_integer_object(test_eval(input), value);
+        }
+    }
+
+    #[test]
+    fn test_function_object() {
+        let input = "fn(x) { x + 2; }";
+        let evaluated = test_eval(input);
+
+        match evaluated {
+            Object::Function(function) => {
+                assert_eq!(
+                    function.parameters.len(),
+                    1,
+                    "function has wrong parameters length. got = {}",
+                    function.parameters.len()
+                );
+                assert_eq!(
+                    function.parameters[0].print_string(),
+                    "x",
+                    "parameter is not `x`, got = {}",
+                    function.parameters[0].print_string()
+                );
+                assert_eq!(
+                    function.body.print_string(),
+                    "(x + 2)",
+                    "body is not `(x + 2)`. got = {}",
+                    function.body.print_string()
+                );
+            }
+            other => panic!("object is not Function. got = {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_function_application() {
+        let tests = vec![
+            ("let identity = fn(x) { x; }; identity(5);", 5),
+            ("let identity = fn(x) { return x; }; identity(5);", 5),
+            ("let double = fn(x) { x * 2; }; double(5);", 10),
+            ("let add = fn(x, y) { x + y; }; add(5, 5);", 10),
+            ("let add = fn(x, y) { x+ y; }; add(5 + 5, add(5, 5));", 20),
+            ("fn(x) { x; }(5)", 5),
+        ];
+
+        for test in tests {
+            test_integer_object(test_eval(test.0), test.1);
         }
     }
 
