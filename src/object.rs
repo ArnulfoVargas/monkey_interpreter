@@ -1,6 +1,11 @@
 use std::{collections::HashMap, fmt::Display};
 
-use crate::ast::{BlockStatement, Identifier, Node};
+use crate::{
+    ast::{BlockStatement, Identifier, Node},
+    builtins::Builtins,
+};
+
+pub type BuiltinFunction = fn(Vec<Object>) -> Object;
 
 #[derive(Debug, Default, Clone)]
 pub enum Object {
@@ -10,6 +15,7 @@ pub enum Object {
     Error(String),
     Function(Function),
     String(String),
+    BuiltinFunction(BuiltinFunction),
 
     #[default]
     Null,
@@ -23,6 +29,7 @@ impl Object {
             Self::Error(_) => String::from("t_error"),
             Self::Function(_) => String::from("t_func"),
             Self::String(_) => String::from("str"),
+            Self::BuiltinFunction(_) => String::from("t_func"),
             Self::ReturnValue(res) => format!("t_return_of<{}>", res.object_type()),
 
             Self::Null => String::from("t_null"),
@@ -38,6 +45,7 @@ impl Display for Object {
             Self::Error(b) => write!(f, "{}", b),
             Self::ReturnValue(b) => write!(f, "{}", *b),
             Self::String(b) => write!(f, "{}", *b),
+            Self::BuiltinFunction(_) => write!(f, "builtin_t_func"),
             Self::Function(func) => {
                 let mut out = String::from("");
                 let mut params = vec![];
@@ -68,16 +76,22 @@ pub struct Environment {
 
 impl Environment {
     pub fn new() -> Environment {
+        let mut env_map = HashMap::new();
+        Self::init_builtins(&mut env_map);
+
         Environment {
-            store: HashMap::new(),
+            store: env_map,
             outer: None,
         }
     }
 
     pub fn new_enclosed_environment(outer: Box<Environment>) -> Environment {
+        let mut env_map = HashMap::new();
+        Self::init_builtins(&mut env_map);
+
         Environment {
             outer: Some(outer),
-            store: HashMap::new(),
+            store: env_map,
         }
     }
 
@@ -89,6 +103,14 @@ impl Environment {
                 None => None,
             },
         };
+    }
+
+    fn init_builtins(map: &mut HashMap<String, Object>) {
+        let builtin_funcs = Builtins.all_builtins();
+
+        for (name, object) in builtin_funcs {
+            map.insert(name, object);
+        }
     }
 
     pub fn set(&mut self, name: String, value: Object) -> Option<Object> {
