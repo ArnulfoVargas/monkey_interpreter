@@ -1,5 +1,5 @@
 use crate::{
-    ast::{ExpressionNode, Program, StatementNode},
+    ast::{BlockStatement, ExpressionNode, IfExpression, Program, StatementNode},
     object::Object,
 };
 
@@ -19,6 +19,10 @@ impl Evaluator {
 
         for stmt in program.statements {
             result = self.eval_statement(stmt);
+
+            if let Object::ReturnValue(ret) = result {
+                return *ret;
+            }
         }
 
         result
@@ -27,6 +31,10 @@ impl Evaluator {
     fn eval_statement(&self, stmt: StatementNode) -> Object {
         match stmt {
             StatementNode::Expression(exp) => self.eval_expression(exp.expression),
+            StatementNode::Return(ret) => {
+                let val = self.eval_expression(ret.ret_value);
+                return Object::ReturnValue(Box::new(val));
+            }
             _ => Object::Null,
         }
     }
@@ -48,12 +56,47 @@ impl Evaluator {
 
                     Self::eval_infix_expression(inf.operator, &left, &right)
                 }
+                ExpressionNode::If(expr) => self.eval_if_expression(expr),
 
                 _ => NULL,
             };
         }
 
         Object::Null
+    }
+
+    fn eval_if_expression(&self, exp: IfExpression) -> Object {
+        let condition = self.eval_expression(Some(*exp.condition));
+        return if Self::is_truth(condition) {
+            self.eval_block_statement(exp.consequence)
+        } else if let Some(alt) = exp.alternative {
+            self.eval_block_statement(alt)
+        } else {
+            NULL
+        };
+    }
+
+    fn eval_block_statement(&self, block: BlockStatement) -> Object {
+        let mut result = NULL;
+
+        for stmt in block.statements {
+            result = self.eval_statement(stmt);
+
+            if let Object::ReturnValue(_) = result {
+                return result;
+            }
+        }
+
+        result
+    }
+
+    fn is_truth(obj: Object) -> bool {
+        match obj {
+            Object::Null => false,
+            Object::Boolean(b) => b,
+            Object::Integer(i) => i != 0,
+            _ => true,
+        }
     }
 
     fn eval_infix_expression(operator: String, left: &Object, right: &Object) -> Object {
@@ -200,6 +243,60 @@ mod text {
 
             let evaluated = test_eval(input);
             test_boolean_object(evaluated, val);
+        }
+    }
+
+    #[test]
+    fn test_if_else_expression() {
+        let tests = vec![
+            ("if (true) { 10 }", Some(10)),
+            ("if (false) { 10 }", None),
+            ("if (1) { 10 }", Some(10)),
+            ("if (1 < 2) { 10 }", Some(10)),
+            ("if (1 > 2) { 10 }", None),
+            ("if (1 > 2) { 10 } else { 20 }", Some(20)),
+            ("if (1 < 2) { 10 } else { 20 }", Some(10)),
+        ];
+        for test in tests {
+            let (input, value) = test;
+            let evaluated = test_eval(input);
+
+            if let Some(int) = value {
+                test_integer_object(evaluated, int);
+            } else {
+                test_null_object(evaluated);
+            }
+        }
+    }
+
+    #[test]
+    fn test_return_statements() {
+        let tests = vec![
+            ("return 10", 10),
+            ("return 10; 9;", 10),
+            ("return 2 * 5; 9;", 10),
+            ("9; return 2 * 5; 9;", 10),
+            (
+                "if (10 > 1) {
+                if (10 > 1) {
+                    return 10;
+                }
+                return 1;
+            }",
+                10,
+            ),
+        ];
+
+        for test in tests {
+            let evaluated = test_eval(test.0);
+            test_integer_object(evaluated, test.1);
+        }
+    }
+
+    fn test_null_object(obj: Object) {
+        match obj {
+            Object::Null => assert!(true),
+            _ => assert!(false),
         }
     }
 
