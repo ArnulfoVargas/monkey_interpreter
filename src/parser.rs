@@ -2,9 +2,11 @@ use std::{collections::HashMap, vec};
 
 use crate::{
     ast::{
-        BlockStatement, Boolean, CallExpression, ExpressionNode, ExpressionStatement,
-        FunctionLiteral, Identifier, IfExpression, InfixExpression, IntegerLiteral, LetStatement,
-        PrefixExpression, Program, ReturnStatement, StatementNode,
+        BlockStatement, Boolean, CallExpression,
+        ExpressionNode::{self},
+        ExpressionStatement, FunctionLiteral, Identifier, IfExpression, InfixExpression,
+        IntegerLiteral, LetStatement, PrefixExpression, Program, ReasignLiteral, ReturnStatement,
+        StatementNode, StringLiteral,
     },
     lexer::Lexer,
     token::{
@@ -19,16 +21,18 @@ type InfixParseFn = fn(parser: &mut Parser, exp: ExpressionNode) -> Option<Expre
 #[derive(Clone)]
 enum PrecedenceLevel {
     Lowest = 0,
-    Equals = 1,
-    LessGreater = 2,
-    Sum = 3,
-    Product = 4,
-    Prefix = 5,
-    Call = 6,
+    Assign = 1,
+    Equals = 2,
+    LessGreater = 3,
+    Sum = 4,
+    Product = 5,
+    Prefix = 6,
+    Call = 7,
 }
 
 fn precedence_map(kind: &TokenKind) -> PrecedenceLevel {
     return match kind {
+        TokenKind::Assign => PrecedenceLevel::Assign,
         TokenKind::Equal => PrecedenceLevel::Equals,
         TokenKind::NotEqual => PrecedenceLevel::Equals,
         TokenKind::LessThan => PrecedenceLevel::LessGreater,
@@ -71,6 +75,7 @@ impl Parser {
         parser.register_prefix(TokenKind::Lparen, Self::parse_grouped_expression);
         parser.register_prefix(TokenKind::If, Self::parse_if_expression);
         parser.register_prefix(TokenKind::Function, Self::parse_function_literal);
+        parser.register_prefix(TokenKind::String, Self::parse_string_literal);
 
         parser.register_infix(TokenKind::Plus, Self::parse_infix_expression);
         parser.register_infix(TokenKind::Minus, Self::parse_infix_expression);
@@ -81,11 +86,29 @@ impl Parser {
         parser.register_infix(TokenKind::Equal, Self::parse_infix_expression);
         parser.register_infix(TokenKind::NotEqual, Self::parse_infix_expression);
         parser.register_infix(TokenKind::Lparen, Self::parse_call_expression);
+        parser.register_infix(TokenKind::Assign, Self::parse_assignment_literal);
 
         parser.next_token();
         parser.next_token();
 
         parser
+    }
+
+    fn parse_assignment_literal(&mut self, left: ExpressionNode) -> Option<ExpressionNode> {
+        self.next_token();
+        let token = self.current_token.clone();
+        self.next_token();
+
+        let value = self.parse_expression(PrecedenceLevel::Lowest);
+
+        match value {
+            Some(exp) => Some(ExpressionNode::Reasign(ReasignLiteral {
+                token,
+                left: Box::new(left),
+                right: Box::new(exp),
+            })),
+            None => None,
+        }
     }
 
     fn parse_identifier(&mut self) -> Option<ExpressionNode> {
@@ -334,6 +357,13 @@ impl Parser {
         }
 
         Some(args)
+    }
+
+    fn parse_string_literal(&mut self) -> Option<ExpressionNode> {
+        Some(ExpressionNode::String(StringLiteral {
+            token: self.current_token.clone(),
+            value: self.current_token.literal.clone(),
+        }))
     }
 
     fn next_token(&mut self) {
@@ -823,6 +853,48 @@ mod test {
         }
     }
 
+    #[test]
+    fn test_reasign_statements() {
+        let input1 = "let a = 5; a = 10;";
+        let lexer = Lexer::new(input1);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program().unwrap();
+        check_parser_errors(parser);
+
+        match &program.statements[1] {
+            StatementNode::Expression(exp_stmt) => match exp_stmt.expression.as_ref().unwrap() {
+                ExpressionNode::Reasign(reasign) => {
+                    test_identifier(&reasign.left, String::from("a"));
+                    test_literal_expression(&reasign.right, Box::new(10));
+                }
+                other => panic!("expression is not Reasign. got = {:?}", other),
+            },
+            other => panic!("statement is not ExpressionStatement. got = {:?}", other),
+        }
+
+        let input2 = "let a = 5; a = a + 10;";
+        let lexer = Lexer::new(input2);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program().unwrap();
+        check_parser_errors(parser);
+
+        match &program.statements[1] {
+            StatementNode::Expression(exp_stmt) => match exp_stmt.expression.as_ref().unwrap() {
+                ExpressionNode::Reasign(reasign) => {
+                    test_identifier(&reasign.left, String::from("a"));
+                    test_infix_expression(
+                        &reasign.right,
+                        Box::new("a"),
+                        String::from("+"),
+                        Box::new(10),
+                    );
+                }
+                other => panic!("expression is not Reasign. got = {:?}", other),
+            },
+            other => panic!("statement is not ExpressionStatement. got = {:?}", other),
+        }
+    }
+
     fn test_integer_literal(exp: &ExpressionNode, value: i64) {
         match exp {
             ExpressionNode::Integer(int) => {
@@ -1194,10 +1266,10 @@ mod test {
 
                     match &fn_exp.parameters[0] {
                         Identifier { token, value } => {
-                            assert_eq!(value, "x", "parameter wrong. Expected `x` got={}", value);
+                            assert_eq!(value, "x", "parameter wrong. Expected `x` got = {}", value);
                             assert_eq!(
                                 token.literal, "x",
-                                "parameter wrong. Expected `x` got={}",
+                                "parameter wrong. Expected `x` got = {}",
                                 token.literal
                             );
                         }
@@ -1205,10 +1277,10 @@ mod test {
 
                     match &fn_exp.parameters[1] {
                         Identifier { token, value } => {
-                            assert_eq!(value, "y", "parameter wrong. Expected `y` got={}", value);
+                            assert_eq!(value, "y", "parameter wrong. Expected `y` got = {}", value);
                             assert_eq!(
                                 token.literal, "y",
-                                "parameter wrong. Expected `y` got={}",
+                                "parameter wrong. Expected `y` got = {}",
                                 token.literal
                             );
                         }
@@ -1217,7 +1289,7 @@ mod test {
                     assert_eq!(
                         fn_exp.body.statements.len(),
                         1,
-                        "function body statements wrong. Expected 1 got={}",
+                        "function body statements wrong. Expected 1 got = {}",
                         fn_exp.body.statements.len()
                     );
 
@@ -1280,9 +1352,9 @@ mod test {
                             );
                         }
                     }
-                    other => panic!("Expression is not FunctionLiteral. got={:?}", other),
+                    other => panic!("Expression is not FunctionLiteral. got = {:?}", other),
                 },
-                other => panic!("statement is not an ExpressionStatement. got={:?}", other),
+                other => panic!("statement is not an ExpressionStatement. got = {:?}", other),
             }
         }
     }
@@ -1300,7 +1372,7 @@ mod test {
         assert_eq!(
             program.statements.len(),
             1,
-            "statements does not contain 1 statements, got={}",
+            "statements does not contain 1 statements, got = {}",
             program.statements.len()
         );
 
@@ -1311,7 +1383,7 @@ mod test {
                     assert_eq!(
                         call_exp.arguments.len(),
                         3,
-                        "wrong length of arguments, expected 3. got={}",
+                        "wrong length of arguments, expected 3. got = {}",
                         call_exp.arguments.len()
                     );
                     test_literal_expression(&call_exp.arguments[0], Box::new(1));
@@ -1328,9 +1400,39 @@ mod test {
                         Box::new(5),
                     );
                 }
-                other => panic!("Expression is not FunctionLiteral. got={:?}", other),
+                other => panic!("Expression is not FunctionLiteral. got = {:?}", other),
             },
-            other => panic!("statement is not an ExpressionStatement. got={:?}", other),
+            other => panic!("statement is not an ExpressionStatement. got = {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_string_literal_expression() {
+        let input = r#""hello world""#;
+
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+        check_parser_errors(parser);
+
+        match &program.unwrap().statements[0] {
+            StatementNode::Expression(exp_stmt) => {
+                match &exp_stmt
+                    .expression
+                    .as_ref()
+                    .expect("error parsing expression")
+                {
+                    ExpressionNode::String(str_literal) => {
+                        assert_eq!(
+                            str_literal.value, "hello world",
+                            "string value not `hello world` got = {}",
+                            str_literal.value
+                        );
+                    }
+                    other => panic!("not a string literal. got = {:?}", other),
+                }
+            }
+            other => panic!("not an expression statement. got = {:?}", other),
         }
     }
 }

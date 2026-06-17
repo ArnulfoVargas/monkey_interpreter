@@ -9,6 +9,7 @@ pub enum Object {
     ReturnValue(Box<Object>),
     Error(String),
     Function(Function),
+    String(String),
 
     #[default]
     Null,
@@ -21,6 +22,7 @@ impl Object {
             Self::Boolean(_) => String::from("bool"),
             Self::Error(_) => String::from("t_error"),
             Self::Function(_) => String::from("t_func"),
+            Self::String(_) => String::from("str"),
             Self::ReturnValue(res) => format!("t_return_of<{}>", res.object_type()),
 
             Self::Null => String::from("t_null"),
@@ -35,6 +37,7 @@ impl Display for Object {
             Self::Boolean(b) => write!(f, "{}", b),
             Self::Error(b) => write!(f, "{}", b),
             Self::ReturnValue(b) => write!(f, "{}", *b),
+            Self::String(b) => write!(f, "{}", *b),
             Self::Function(func) => {
                 let mut out = String::from("");
                 let mut params = vec![];
@@ -46,7 +49,7 @@ impl Display for Object {
                 out.push_str("fn");
                 out.push_str("(");
                 out.push_str(params.join(", ").as_str());
-                out.push_str(") {");
+                out.push_str(") {\n");
                 out.push_str(func.body.print_string().as_str());
                 out.push_str("\n}");
 

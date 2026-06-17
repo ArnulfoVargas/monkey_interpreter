@@ -83,6 +83,19 @@ impl Lexer {
         };
     }
 
+    fn read_string(&mut self) -> String {
+        let position = self.position + 1;
+        self.read_char();
+
+        while self.ch != '"' && self.ch != '\0' {
+            self.read_char();
+        }
+
+        let value = &self.input[position..self.position];
+
+        value.into_iter().collect()
+    }
+
     pub fn next_token(&mut self) -> Token {
         self.skip_withespace();
         let token = match self.ch {
@@ -124,6 +137,10 @@ impl Lexer {
                     Lexer::new_token(TokenKind::Assign, self.ch)
                 }
             }
+            '"' => Token {
+                kind: TokenKind::String,
+                literal: self.read_string(),
+            },
             _ => {
                 return if Lexer::is_letter(self.ch) {
                     let literal = self.read_identifier();
@@ -173,6 +190,8 @@ mod test {
 
         10 == 10;
         10 != 5;
+        "foobar"
+        "foo bar"
         "#;
 
         let expected: Vec<Token> = vec![
@@ -467,6 +486,14 @@ mod test {
             Token {
                 kind: TokenKind::Semicolon,
                 literal: ";".to_string(),
+            },
+            Token {
+                kind: TokenKind::String,
+                literal: "foobar".to_string(),
+            },
+            Token {
+                kind: TokenKind::String,
+                literal: "foo bar".to_string(),
             },
             Token {
                 kind: TokenKind::Eof,

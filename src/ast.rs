@@ -16,7 +16,7 @@ pub enum StatementNode {
 #[derive(Debug, Clone, Default)]
 pub enum ExpressionNode {
     #[default]
-    None,
+    NONE,
     IdentifierNode(Identifier),
     Integer(IntegerLiteral),
     Prefix(PrefixExpression),
@@ -25,6 +25,8 @@ pub enum ExpressionNode {
     If(IfExpression),
     Funcion(FunctionLiteral),
     Call(CallExpression),
+    String(StringLiteral),
+    Reasign(ReasignLiteral),
 }
 
 impl Node for StatementNode {
@@ -58,7 +60,9 @@ impl Node for ExpressionNode {
             Self::If(ident) => ident.token_literal(),
             Self::Funcion(ident) => ident.token_literal(),
             Self::Call(ident) => ident.token_literal(),
-            Self::None => String::from(""),
+            Self::String(ident) => ident.token_literal(),
+            Self::Reasign(ident) => ident.token_literal(),
+            Self::NONE => String::from(""),
         }
     }
 
@@ -72,7 +76,9 @@ impl Node for ExpressionNode {
             Self::If(ident) => ident.print_string(),
             Self::Funcion(ident) => ident.print_string(),
             Self::Call(ident) => ident.print_string(),
-            Self::None => String::from(""),
+            Self::String(ident) => ident.print_string(),
+            Self::Reasign(ident) => ident.print_string(),
+            Self::NONE => String::from(""),
         }
     }
 }
@@ -388,6 +394,39 @@ impl Node for CallExpression {
         out.push_str(")");
 
         out
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct StringLiteral {
+    pub token: Token,
+    pub value: String,
+}
+
+impl Node for StringLiteral {
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    fn print_string(&self) -> String {
+        self.token_literal()
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct ReasignLiteral {
+    pub token: Token,
+    pub left: Box<ExpressionNode>,
+    pub right: Box<ExpressionNode>,
+}
+
+impl Node for ReasignLiteral {
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    fn print_string(&self) -> String {
+        self.token_literal()
     }
 }
 

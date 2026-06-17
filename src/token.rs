@@ -43,6 +43,8 @@ pub enum TokenKind {
     Else,
     Return,
 
+    String,
+
     Exit,
 }
 
@@ -76,6 +78,7 @@ impl Display for TokenKind {
             TokenKind::Return => write!(f, "return"),
             TokenKind::Equal => write!(f, "=="),
             TokenKind::NotEqual => write!(f, "!="),
+            TokenKind::String => write!(f, "String"),
 
             TokenKind::Exit => write!(f, "\0"),
         }

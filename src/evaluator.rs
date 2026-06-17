@@ -116,6 +116,28 @@ impl Evaluator {
 
                     self.apply_function(func, args)
                 }
+                ExpressionNode::String(string) => Object::String(string.value),
+                ExpressionNode::Reasign(assign) => {
+                    let name = match *assign.left {
+                        ExpressionNode::IdentifierNode(ident) => ident.value,
+                        other => {
+                            return Object::Error(format!("invalid assignment target: {:?}", other))
+                        }
+                    };
+
+                    if self.env.get(name.clone()).is_none() {
+                        return Object::Error(format!("identifier not found: {}", name));
+                    }
+
+                    let value = self.eval_expression(Some(*assign.right));
+                    if Self::is_error(&value) {
+                        return value;
+                    }
+
+                    self.env.set(name, value.clone());
+
+                    value
+                }
 
                 _ => NULL,
             };
@@ -244,6 +266,17 @@ impl Evaluator {
                     )),
                 }
             }
+            (Object::String(l), Object::String(r), op) => {
+                return match op.as_str() {
+                    "+" => Object::String(format!("{}{}", l, r)),
+                    _ => Object::Error(format!(
+                        "unknown operator: {} {} {}",
+                        left.object_type(),
+                        op,
+                        right.object_type()
+                    )),
+                };
+            }
             (l, r, op) => Object::Error(format!(
                 "unknown operator: {} {} {}",
                 l.object_type(),
@@ -312,7 +345,12 @@ impl Evaluator {
 #[cfg(test)]
 mod text {
     use super::*;
-    use crate::{ast::Node, lexer::Lexer, object::Object, parser::Parser};
+    use crate::{
+        ast::Node,
+        lexer::Lexer,
+        object::{self, Object},
+        parser::Parser,
+    };
 
     #[test]
     fn test_eval_integer_expr() {
@@ -466,6 +504,7 @@ mod text {
                 "unknown operator: bool + bool",
             ),
             ("foobar", "identifier not found: foobar"),
+            (r#""Hello" - "World""#, "unknown operator: str - str"),
         ];
 
         for test in tests {
@@ -535,6 +574,110 @@ mod text {
 
         for test in tests {
             test_integer_object(test_eval(test.0), test.1);
+        }
+    }
+
+    #[test]
+    fn test_closures() {
+        let input = r#"
+        let newAdder = fn(x) {
+            fn(y) { x + y};
+        };
+
+        let addTwo = newAdder(2);
+        addTwo(2);
+        "#;
+
+        test_integer_object(test_eval(input), 4);
+    }
+
+    #[test]
+    fn test_string_literal() {
+        let input = r#""Hello World!""#;
+        let evaluated = test_eval(input);
+
+        match evaluated {
+            Object::String(str) => {
+                assert_eq!(str, "Hello World!", "string has wrong value. got = {}", str);
+            }
+            other => panic!("object is not string. got = {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_string_concatenation() {
+        let input = r#""Hello" + " " + "World!""#;
+        let evaluated = test_eval(input);
+
+        match evaluated {
+            Object::String(string) => assert_eq!(
+                string, "Hello World!",
+                "string has wrong value. got = {}",
+                string
+            ),
+            other => panic!("object is not string literal. got = {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_reasign_statements() {
+        let tests: Vec<(&str, Box<i64>)> = vec![
+            ("let a = 5; a = 10", Box::new(10)),
+            ("let a = 5; a = a + 10", Box::new(15)),
+            ("let a = 10; let b = 5; a = b", Box::new(5)),
+            ("let a = 10; let b = 5; a = a + b", Box::new(15)),
+        ];
+        for test in tests {
+            let (input, expected) = test;
+            let evaluated = test_eval(input);
+
+            match evaluated {
+                Object::Integer(v) => {
+                    assert_eq!(
+                        *expected, v,
+                        "result value is not {}. got = {}",
+                        *expected, v
+                    );
+                }
+                other => panic!("object is not integer literal. got = {:?}", other),
+            }
+        }
+    }
+
+    #[test]
+    fn test_reasign_string_statements() {
+        let tests: Vec<(&str, Box<String>)> = vec![
+            (
+                r#"let a = "hello"; a = "world""#,
+                Box::new(String::from("world")),
+            ),
+            (
+                r#"let a = "hello"; a = a + "world""#,
+                Box::new(String::from("helloworld")),
+            ),
+            (
+                r#"let a = "hello"; a = a + " " + "world""#,
+                Box::new(String::from("hello world")),
+            ),
+            (
+                r#"let a = "hello";let b = "world"; a = a + " " + b"#,
+                Box::new(String::from("hello world")),
+            ),
+        ];
+        for test in tests {
+            let (input, expected) = test;
+            let evaluated = test_eval(input);
+
+            match evaluated {
+                Object::String(v) => {
+                    assert_eq!(
+                        *expected, v,
+                        "result value is not {}. got = {}",
+                        *expected, v
+                    );
+                }
+                other => panic!("object is not integer literal. got = {:?}", other),
+            }
         }
     }
 
