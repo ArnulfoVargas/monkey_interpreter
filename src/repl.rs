@@ -1,6 +1,6 @@
 use std::io::{Stdin, Stdout, Write};
 
-use crate::{lexer::Lexer, token::TokenKind};
+use crate::{ast::Node, lexer::Lexer, parser::Parser};
 
 pub fn start(stdin: Stdin, mut stdout: Stdout) {
     loop {
@@ -14,16 +14,26 @@ pub fn start(stdin: Stdin, mut stdout: Stdout) {
             return;
         }
 
-        let mut lexer = Lexer::new(input.as_str());
+        let lexer = Lexer::new(input.as_str());
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program().expect("error parsing program");
 
-        loop {
-            let tk = lexer.next_token();
-
-            if tk.kind == TokenKind::Eof {
-                break;
-            }
-
-            writeln!(stdout, "{tk:?}").expect("token should have been written");
+        if parser.errors().len() != 0 {
+            print_parse_errors(&stdout, parser.errors());
         }
+
+        let parsed_program_string = program.print_string();
+
+        writeln!(stdout, "{parsed_program_string}")
+            .expect("parsed program should be written to stdout");
+    }
+}
+
+fn print_parse_errors(mut stdout: &Stdout, errors: &Vec<String>) {
+    writeln!(stdout, "Parser errors found!")
+        .expect("error message info should be written to stdout");
+
+    for err in errors {
+        writeln!(stdout, "\t>> {err}").expect("error message should be written to stdout");
     }
 }
