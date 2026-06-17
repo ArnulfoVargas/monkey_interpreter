@@ -23,6 +23,8 @@ pub enum ExpressionNode {
     Infix(InfixExpression),
     BooleanNode(Boolean),
     If(IfExpression),
+    Funcion(FunctionLiteral),
+    Call(CallExpression),
 }
 
 impl Node for StatementNode {
@@ -54,6 +56,8 @@ impl Node for ExpressionNode {
             Self::Infix(ident) => ident.token_literal(),
             Self::BooleanNode(ident) => ident.token_literal(),
             Self::If(ident) => ident.token_literal(),
+            Self::Funcion(ident) => ident.token_literal(),
+            Self::Call(ident) => ident.token_literal(),
             Self::None => String::from(""),
         }
     }
@@ -66,6 +70,8 @@ impl Node for ExpressionNode {
             Self::Infix(ident) => ident.print_string(),
             Self::BooleanNode(ident) => ident.print_string(),
             Self::If(ident) => ident.print_string(),
+            Self::Funcion(ident) => ident.print_string(),
+            Self::Call(ident) => ident.print_string(),
             Self::None => String::from(""),
         }
     }
@@ -321,6 +327,65 @@ impl Node for BlockStatement {
         for stmt in &self.statements {
             out.push_str(stmt.print_string().as_str());
         }
+
+        out
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct FunctionLiteral {
+    pub token: Token,
+    pub parameters: Vec<Identifier>,
+    pub body: BlockStatement,
+}
+
+impl Node for FunctionLiteral {
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    fn print_string(&self) -> String {
+        let mut out = String::from("");
+        let mut params = vec![];
+
+        for param in &self.parameters {
+            params.push(param.print_string());
+        }
+
+        out.push_str(self.token_literal().as_str());
+        out.push_str("(");
+        out.push_str(params.join(", ").as_str());
+        out.push_str(")");
+        out.push_str(self.body.print_string().as_str());
+
+        out
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct CallExpression {
+    pub token: Token,
+    pub function: Box<ExpressionNode>,
+    pub arguments: Vec<ExpressionNode>,
+}
+
+impl Node for CallExpression {
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    fn print_string(&self) -> String {
+        let mut out = String::from("");
+        let mut args = vec![];
+
+        for arg in &self.arguments {
+            args.push(arg.print_string());
+        }
+
+        out.push_str(self.function.print_string().as_str());
+        out.push_str("(");
+        out.push_str(args.join(", ").as_str());
+        out.push_str(")");
 
         out
     }
