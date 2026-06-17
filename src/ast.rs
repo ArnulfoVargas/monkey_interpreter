@@ -1,4 +1,4 @@
-use crate::token::Token;
+use crate::token::{Token, TokenKind};
 
 pub trait Node {
     fn token_literal(&self) -> String;
@@ -12,9 +12,14 @@ pub enum StatementNode {
     Expression(ExpressionStatement),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum ExpressionNode {
+    #[default]
+    None,
     IdentifierNode(Identifier),
+    Integer(IntegerLiteral),
+    Prefix(PrefixExpression),
+    Infix(InfixExpression),
 }
 
 impl Node for StatementNode {
@@ -39,12 +44,20 @@ impl Node for ExpressionNode {
     fn token_literal(&self) -> String {
         match self {
             Self::IdentifierNode(ident) => ident.token_literal(),
+            Self::Integer(ident) => ident.token_literal(),
+            Self::Prefix(ident) => ident.token_literal(),
+            Self::Infix(ident) => ident.token_literal(),
+            Self::None => String::from(""),
         }
     }
 
     fn print_string(&self) -> String {
         match self {
             Self::IdentifierNode(ident) => ident.print_string(),
+            Self::Integer(ident) => ident.print_string(),
+            Self::Prefix(ident) => ident.print_string(),
+            Self::Infix(ident) => ident.print_string(),
+            Self::None => String::from(""),
         }
     }
 }
@@ -166,6 +179,72 @@ impl Node for ExpressionStatement {
         }
 
         String::from("")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IntegerLiteral {
+    pub token: Token,
+    pub value: i64,
+}
+
+impl Node for IntegerLiteral {
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    fn print_string(&self) -> String {
+        self.token_literal()
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PrefixExpression {
+    pub token: Token,
+    pub operator: String,
+    pub right: Box<ExpressionNode>,
+}
+
+impl Node for PrefixExpression {
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    fn print_string(&self) -> String {
+        let mut out = String::from("");
+
+        out.push_str("(");
+        out.push_str(&self.operator.as_str());
+        out.push_str(self.right.print_string().as_str());
+        out.push_str(")");
+
+        out
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct InfixExpression {
+    pub token: Token,
+    pub left: Box<ExpressionNode>,
+    pub operator: String,
+    pub right: Box<ExpressionNode>,
+}
+
+impl Node for InfixExpression {
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    fn print_string(&self) -> String {
+        let mut out = String::from("");
+
+        out.push_str("(");
+        out.push_str(self.left.print_string().as_str());
+        out.push_str(format!(" {} ", self.operator).as_str());
+        out.push_str(self.right.print_string().as_str());
+        out.push_str(")");
+
+        out
     }
 }
 
