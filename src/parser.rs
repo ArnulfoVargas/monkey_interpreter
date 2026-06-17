@@ -1,14 +1,14 @@
-use std::{collections::HashMap, path::Component::Prefix};
+use std::collections::HashMap;
 
 use crate::{
     ast::{
         Boolean, ExpressionNode, ExpressionStatement, Identifier, InfixExpression, IntegerLiteral,
-        LetStatement, Node, PrefixExpression, Program, ReturnStatement, StatementNode,
+        LetStatement, PrefixExpression, Program, ReturnStatement, StatementNode,
     },
     lexer::Lexer,
     token::{
         Token,
-        TokenKind::{self, Ident},
+        TokenKind::{self},
     },
 };
 
@@ -66,6 +66,7 @@ impl Parser {
         parser.register_prefix(TokenKind::Minus, Self::parse_prefix_expression);
         parser.register_prefix(TokenKind::True, Self::parse_boolean);
         parser.register_prefix(TokenKind::False, Self::parse_boolean);
+        parser.register_prefix(TokenKind::Lparen, Self::parse_grouped_expression);
 
         parser.register_infix(TokenKind::Plus, Self::parse_infix_expression);
         parser.register_infix(TokenKind::Minus, Self::parse_infix_expression);
@@ -151,6 +152,17 @@ impl Parser {
             token: self.current_token.clone(),
             value: self.current_token_is(TokenKind::True),
         }))
+    }
+
+    fn parse_grouped_expression(&mut self) -> Option<ExpressionNode> {
+        self.next_token();
+
+        let exp = self.parse_expression(PrecedenceLevel::Lowest);
+        if !self.expect_peek(TokenKind::Rparen) {
+            return None;
+        }
+
+        exp
     }
 
     fn next_token(&mut self) {
@@ -316,8 +328,8 @@ mod test {
     use std::any;
 
     use crate::{
-        ast::{ExpressionNode, Identifier, Node, StatementNode},
-        lexer::{self, Lexer},
+        ast::{ExpressionNode, Node, StatementNode},
+        lexer::Lexer,
         parser::Parser,
         token::TokenKind,
     };
@@ -525,7 +537,12 @@ mod test {
 
     #[test]
     fn test_parsing_prefix_expressions() {
-        let prefix_tests = vec![("!5", "!", 5), ("-15", "-", 15)];
+        let prefix_tests: Vec<(&str, &str, Box<dyn any::Any>)> = vec![
+            ("!5", "!", Box::new(5)),
+            ("-15", "-", Box::new(15)),
+            ("!true", "!", Box::new(true)),
+            ("!false", "!", Box::new(false)),
+        ];
         for test in prefix_tests {
             let (input, prefix, value) = test;
 
@@ -555,7 +572,7 @@ mod test {
                                 prefix, pre.operator
                             );
 
-                            test_integer_literal(pre.right.as_ref(), value);
+                            test_literal_expression(&pre.right, value);
                         }
                         other => panic!("Expresion not PrefixExpression. got = {:?}", other),
                     }
@@ -570,15 +587,18 @@ mod test {
 
     #[test]
     fn test_parsing_infix_expressions() {
-        let infix_tests: Vec<(&str, i64, &str, i64)> = vec![
-            ("5 + 5;", 5, "+", 5),
-            ("5 - 5;", 5, "-", 5),
-            ("5 * 5;", 5, "*", 5),
-            ("5 / 5;", 5, "/", 5),
-            ("5 > 5;", 5, ">", 5),
-            ("5 < 5;", 5, "<", 5),
-            ("5 == 5;", 5, "==", 5),
-            ("5 != 5;", 5, "!=", 5),
+        let infix_tests: Vec<(&str, Box<dyn any::Any>, &str, Box<dyn any::Any>)> = vec![
+            ("5 + 5;", Box::new(5), "+", Box::new(5)),
+            ("5 - 5;", Box::new(5), "-", Box::new(5)),
+            ("5 * 5;", Box::new(5), "*", Box::new(5)),
+            ("5 / 5;", Box::new(5), "/", Box::new(5)),
+            ("5 > 5;", Box::new(5), ">", Box::new(5)),
+            ("5 < 5;", Box::new(5), "<", Box::new(5)),
+            ("5 == 5;", Box::new(5), "==", Box::new(5)),
+            ("5 != 5;", Box::new(5), "!=", Box::new(5)),
+            ("true == true", Box::new(true), "==", Box::new(true)),
+            ("true != false", Box::new(true), "!=", Box::new(false)),
+            ("false == false", Box::new(false), "==", Box::new(false)),
         ];
         for test in infix_tests {
             let (input, left, operator, right) = test;
@@ -601,12 +621,7 @@ mod test {
                     assert!(exp.expression.is_some());
                     let expression = exp.expression.as_ref().unwrap();
 
-                    test_infix_expression(
-                        expression,
-                        Box::new(left),
-                        operator.to_string(),
-                        Box::new(right),
-                    );
+                    test_infix_expression(expression, left, operator.to_string(), right);
                 }
                 other => panic!(
                     "program.statements[0] is not expression statement. got = {:?}",
@@ -660,6 +675,15 @@ mod test {
                 "3 + 4 * 5 == 3 * 1 + 4 * 5",
                 "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))",
             ),
+            ("true", "true"),
+            ("false", "false"),
+            ("3 > 5 == false", "((3 > 5) == false)"),
+            ("3 < 5 == true", "((3 < 5) == true)"),
+            ("1 + (2 + 3) + 4", "((1 + (2 + 3)) + 4)"),
+            ("(5 + 5) * 2", "((5 + 5) * 2)"),
+            ("2 / (5 + 5)", "(2 / (5 + 5))"),
+            ("-(5 + 5)", "(-(5 + 5))"),
+            ("!(true == true)", "(!(true == true))"),
         ];
 
         for test in tests {
@@ -701,8 +725,34 @@ mod test {
             Some(val) => test_identifier(exp, val.to_string()),
             None => match expected.downcast_ref::<i64>() {
                 Some(int) => test_integer_literal(exp, int.to_owned()),
-                None => panic!("should not happen"),
+                None => match expected.downcast_ref::<bool>() {
+                    Some(boolean) => {
+                        test_boolean_literal(exp, boolean.to_owned());
+                    }
+                    None => (),
+                },
             },
+        }
+    }
+
+    fn test_boolean_literal(exp: &ExpressionNode, value: bool) {
+        match exp {
+            ExpressionNode::BooleanNode(boolean) => {
+                assert_eq!(
+                    boolean.value, value,
+                    "boolean.value not {}. got = {}",
+                    value, boolean.value
+                );
+
+                assert_eq!(
+                    boolean.token_literal(),
+                    format!("{}", value),
+                    "boolean.token_literal not {}. got = {}",
+                    value,
+                    boolean.token_literal()
+                );
+            }
+            other => panic!("exp is not a Boolean. got = {:?}", other),
         }
     }
 
