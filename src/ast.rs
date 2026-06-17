@@ -1,4 +1,4 @@
-use crate::token::{Token, TokenKind};
+use crate::token::Token;
 
 pub trait Node {
     fn token_literal(&self) -> String;
@@ -20,6 +20,7 @@ pub enum ExpressionNode {
     Integer(IntegerLiteral),
     Prefix(PrefixExpression),
     Infix(InfixExpression),
+    BooleanNode(Boolean),
 }
 
 impl Node for StatementNode {
@@ -47,6 +48,7 @@ impl Node for ExpressionNode {
             Self::Integer(ident) => ident.token_literal(),
             Self::Prefix(ident) => ident.token_literal(),
             Self::Infix(ident) => ident.token_literal(),
+            Self::BooleanNode(ident) => ident.token_literal(),
             Self::None => String::from(""),
         }
     }
@@ -57,6 +59,7 @@ impl Node for ExpressionNode {
             Self::Integer(ident) => ident.print_string(),
             Self::Prefix(ident) => ident.print_string(),
             Self::Infix(ident) => ident.print_string(),
+            Self::BooleanNode(ident) => ident.print_string(),
             Self::None => String::from(""),
         }
     }
@@ -245,6 +248,22 @@ impl Node for InfixExpression {
         out.push_str(")");
 
         out
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Boolean {
+    pub token: Token,
+    pub value: bool,
+}
+
+impl Node for Boolean {
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    fn print_string(&self) -> String {
+        self.token_literal()
     }
 }
 

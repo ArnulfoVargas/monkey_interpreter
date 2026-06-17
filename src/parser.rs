@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::Component::Prefix};
 
 use crate::{
     ast::{
-        ExpressionNode, ExpressionStatement, Identifier, InfixExpression, IntegerLiteral,
+        Boolean, ExpressionNode, ExpressionStatement, Identifier, InfixExpression, IntegerLiteral,
         LetStatement, Node, PrefixExpression, Program, ReturnStatement, StatementNode,
     },
     lexer::Lexer,
@@ -64,6 +64,8 @@ impl Parser {
         parser.register_prefix(TokenKind::Int, Self::parse_integer_literal);
         parser.register_prefix(TokenKind::Bang, Self::parse_prefix_expression);
         parser.register_prefix(TokenKind::Minus, Self::parse_prefix_expression);
+        parser.register_prefix(TokenKind::True, Self::parse_boolean);
+        parser.register_prefix(TokenKind::False, Self::parse_boolean);
 
         parser.register_infix(TokenKind::Plus, Self::parse_infix_expression);
         parser.register_infix(TokenKind::Minus, Self::parse_infix_expression);
@@ -142,6 +144,13 @@ impl Parser {
         }
 
         Some(ExpressionNode::Infix(expression))
+    }
+
+    fn parse_boolean(&mut self) -> Option<ExpressionNode> {
+        Some(ExpressionNode::BooleanNode(Boolean {
+            token: self.current_token.clone(),
+            value: self.current_token_is(TokenKind::True),
+        }))
     }
 
     fn next_token(&mut self) {
@@ -304,10 +313,13 @@ impl Parser {
 
 #[cfg(test)]
 mod test {
+    use std::any;
+
     use crate::{
         ast::{ExpressionNode, Identifier, Node, StatementNode},
         lexer::{self, Lexer},
         parser::Parser,
+        token::TokenKind,
     };
 
     #[test]
@@ -558,7 +570,7 @@ mod test {
 
     #[test]
     fn test_parsing_infix_expressions() {
-        let infix_tests = vec![
+        let infix_tests: Vec<(&str, i64, &str, i64)> = vec![
             ("5 + 5;", 5, "+", 5),
             ("5 - 5;", 5, "-", 5),
             ("5 * 5;", 5, "*", 5),
@@ -589,20 +601,12 @@ mod test {
                     assert!(exp.expression.is_some());
                     let expression = exp.expression.as_ref().unwrap();
 
-                    match expression {
-                        ExpressionNode::Infix(inf) => {
-                            test_integer_literal(inf.left.as_ref(), left);
-
-                            assert_eq!(
-                                inf.operator, operator,
-                                "prefix.operator not {}. got = {}",
-                                operator, inf.operator
-                            );
-
-                            test_integer_literal(inf.right.as_ref(), right);
-                        }
-                        other => panic!("Expresion not InfixExpression. got = {:?}", other),
-                    }
+                    test_infix_expression(
+                        expression,
+                        Box::new(left),
+                        operator.to_string(),
+                        Box::new(right),
+                    );
                 }
                 other => panic!(
                     "program.statements[0] is not expression statement. got = {:?}",
@@ -668,6 +672,113 @@ mod test {
 
             let actual = program.print_string();
             assert_eq!(actual, value, "expected = {}, got = {}", value, actual);
+        }
+    }
+
+    fn test_identifier(exp: &ExpressionNode, value: String) {
+        match exp {
+            ExpressionNode::IdentifierNode(ident) => {
+                assert_eq!(
+                    ident.value, value,
+                    "ident.value not {}. got = {}",
+                    value, ident.value
+                );
+
+                assert_eq!(
+                    ident.token_literal(),
+                    value,
+                    "ident.token_literal not {}. got = {}",
+                    value,
+                    ident.token_literal()
+                );
+            }
+            other => panic!("exp not Identifier. got = {:?}", other),
+        }
+    }
+
+    fn test_literal_expression(exp: &ExpressionNode, expected: Box<dyn any::Any>) {
+        match expected.downcast_ref::<String>() {
+            Some(val) => test_identifier(exp, val.to_string()),
+            None => match expected.downcast_ref::<i64>() {
+                Some(int) => test_integer_literal(exp, int.to_owned()),
+                None => panic!("should not happen"),
+            },
+        }
+    }
+
+    fn test_infix_expression(
+        exp: &ExpressionNode,
+        left: Box<dyn any::Any>,
+        operator: String,
+        right: Box<dyn any::Any>,
+    ) {
+        match exp {
+            ExpressionNode::Infix(inf) => {
+                test_literal_expression(&inf.left, left);
+                assert_eq!(
+                    inf.operator, operator,
+                    "operator is not {}. got = {}",
+                    operator, inf.operator
+                );
+                test_literal_expression(&inf.right, right);
+            }
+            other => panic!("exp is not an ExpressionNode. got = {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_boolean_expression() {
+        let input = r#"
+        true;
+        false;
+        "#;
+
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program().unwrap();
+
+        check_parser_erors(parser);
+
+        assert_eq!(
+            program.statements.len(),
+            2,
+            "program.statements does not contain enough statements. got = {}",
+            program.statements.len()
+        );
+
+        let expected_values = vec![(TokenKind::True, "true"), (TokenKind::False, "false")];
+
+        for (idx, test) in expected_values.into_iter().enumerate() {
+            let (kind, value) = test;
+            match &program.statements[idx] {
+                StatementNode::Expression(stmt) => {
+                    assert!(stmt.expression.is_some());
+                    let exp = stmt.expression.as_ref().unwrap();
+                    match exp {
+                        ExpressionNode::BooleanNode(boolean) => {
+                            assert_eq!(
+                                boolean.token.kind, kind,
+                                "statement[{}] token kind not {}. got = {}",
+                                idx, kind, boolean.token.kind
+                            );
+
+                            assert_eq!(
+                                boolean.token_literal(),
+                                value,
+                                "statement[{}] value not {}. got = {}",
+                                idx,
+                                value,
+                                boolean.token_literal()
+                            );
+                        }
+                        other => panic!("statement is not a BooleanNode. got = {:?}", other),
+                    }
+                }
+                other => panic!(
+                    "program.statements[{}] is not ExpressionStatement. got = {:?}",
+                    idx, other
+                ),
+            }
         }
     }
 }
