@@ -3,7 +3,7 @@ use std::{collections::HashMap, ops::Deref};
 use crate::{
     ast::{
         BlockStatement, ExpressionNode, Identifier, IfExpression, Program,
-        StatementNode::{self, Return},
+        StatementNode::{self},
     },
     object::{Environment, Function, HashMapObject, HashStruct, Hashable, Object},
 };
