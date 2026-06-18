@@ -731,6 +731,8 @@ mod text {
         let tests: Vec<(&str, Box<dyn any::Any>)> = vec![
             (r#"len("")"#, Box::new(0_i64)),
             (r#"len("four")"#, Box::new(4_i64)),
+            ("len([1,2])", Box::new(2_i64)),
+            ("len([1,2,35])", Box::new(3_i64)),
             (r#"len("hello world")"#, Box::new(11_i64)),
             (
                 r#"len(1)"#,
