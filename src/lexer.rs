@@ -101,10 +101,10 @@ impl Lexer {
         let token = match self.ch {
             '+' => Lexer::new_token(TokenKind::Plus, self.ch),
             ';' => Lexer::new_token(TokenKind::Semicolon, self.ch),
-            '(' => Lexer::new_token(TokenKind::Lparen, self.ch),
-            ')' => Lexer::new_token(TokenKind::Rparen, self.ch),
-            '{' => Lexer::new_token(TokenKind::Lbraces, self.ch),
-            '}' => Lexer::new_token(TokenKind::Rbraces, self.ch),
+            '(' => Lexer::new_token(TokenKind::LParen, self.ch),
+            ')' => Lexer::new_token(TokenKind::RParen, self.ch),
+            '{' => Lexer::new_token(TokenKind::LBrace, self.ch),
+            '}' => Lexer::new_token(TokenKind::RBrace, self.ch),
             ',' => Lexer::new_token(TokenKind::Comma, self.ch),
             '/' => Lexer::new_token(TokenKind::Slash, self.ch),
             '-' => Lexer::new_token(TokenKind::Minus, self.ch),
@@ -143,6 +143,7 @@ impl Lexer {
             },
             '[' => Lexer::new_token(TokenKind::LBracket, self.ch),
             ']' => Lexer::new_token(TokenKind::RBracket, self.ch),
+            ':' => Lexer::new_token(TokenKind::Colon, self.ch),
             _ => {
                 return if Lexer::is_letter(self.ch) {
                     let literal = self.read_identifier();
@@ -195,6 +196,7 @@ mod test {
         "foobar"
         "foo bar"
         [1, 2];
+        {"foo" : "bar"}
         "#;
 
         let expected: Vec<Token> = vec![
@@ -255,7 +257,7 @@ mod test {
                 literal: "fn".to_string(),
             },
             Token {
-                kind: TokenKind::Lparen,
+                kind: TokenKind::LParen,
                 literal: "(".to_string(),
             },
             Token {
@@ -271,11 +273,11 @@ mod test {
                 literal: "y".to_string(),
             },
             Token {
-                kind: TokenKind::Rparen,
+                kind: TokenKind::RParen,
                 literal: ")".to_string(),
             },
             Token {
-                kind: TokenKind::Lbraces,
+                kind: TokenKind::LBrace,
                 literal: "{".to_string(),
             },
             Token {
@@ -295,7 +297,7 @@ mod test {
                 literal: ";".to_string(),
             },
             Token {
-                kind: TokenKind::Rbraces,
+                kind: TokenKind::RBrace,
                 literal: "}".to_string(),
             },
             Token {
@@ -319,7 +321,7 @@ mod test {
                 literal: "add".to_string(),
             },
             Token {
-                kind: TokenKind::Lparen,
+                kind: TokenKind::LParen,
                 literal: "(".to_string(),
             },
             Token {
@@ -335,7 +337,7 @@ mod test {
                 literal: "ten".to_string(),
             },
             Token {
-                kind: TokenKind::Rparen,
+                kind: TokenKind::RParen,
                 literal: ")".to_string(),
             },
             Token {
@@ -395,7 +397,7 @@ mod test {
                 literal: "if".to_string(),
             },
             Token {
-                kind: TokenKind::Lparen,
+                kind: TokenKind::LParen,
                 literal: "(".to_string(),
             },
             Token {
@@ -411,11 +413,11 @@ mod test {
                 literal: "10".to_string(),
             },
             Token {
-                kind: TokenKind::Rparen,
+                kind: TokenKind::RParen,
                 literal: ")".to_string(),
             },
             Token {
-                kind: TokenKind::Lbraces,
+                kind: TokenKind::LBrace,
                 literal: "{".to_string(),
             },
             Token {
@@ -431,7 +433,7 @@ mod test {
                 literal: ";".to_string(),
             },
             Token {
-                kind: TokenKind::Rbraces,
+                kind: TokenKind::RBrace,
                 literal: "}".to_string(),
             },
             Token {
@@ -439,7 +441,7 @@ mod test {
                 literal: "else".to_string(),
             },
             Token {
-                kind: TokenKind::Lbraces,
+                kind: TokenKind::LBrace,
                 literal: "{".to_string(),
             },
             Token {
@@ -455,7 +457,7 @@ mod test {
                 literal: ";".to_string(),
             },
             Token {
-                kind: TokenKind::Rbraces,
+                kind: TokenKind::RBrace,
                 literal: "}".to_string(),
             },
             Token {
@@ -521,6 +523,26 @@ mod test {
             Token {
                 kind: TokenKind::Semicolon,
                 literal: ";".to_string(),
+            },
+            Token {
+                kind: TokenKind::LBrace,
+                literal: "{".to_string(),
+            },
+            Token {
+                kind: TokenKind::String,
+                literal: "foo".to_string(),
+            },
+            Token {
+                kind: TokenKind::Colon,
+                literal: ":".to_string(),
+            },
+            Token {
+                kind: TokenKind::String,
+                literal: "bar".to_string(),
+            },
+            Token {
+                kind: TokenKind::RBrace,
+                literal: "}".to_string(),
             },
             Token {
                 kind: TokenKind::Eof,

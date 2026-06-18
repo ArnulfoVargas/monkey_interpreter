@@ -1,4 +1,8 @@
-use std::{collections::HashMap, fmt::Display};
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    hash::{DefaultHasher, Hash, Hasher},
+};
 
 use crate::{
     ast::{BlockStatement, Identifier, Node},
@@ -17,6 +21,7 @@ pub enum Object {
     String(String),
     BuiltinFunction(BuiltinFunction),
     Array(Vec<Object>),
+    Hash(HashStruct),
 
     #[default]
     Null,
@@ -33,6 +38,7 @@ impl Object {
             Self::BuiltinFunction(_) => String::from("t_func"),
             Self::ReturnValue(res) => format!("t_return_of<{}>", res.object_type()),
             Self::Array(_) => String::from("t_array"),
+            Self::Hash(_) => String::from("t_hash"),
 
             Self::Null => String::from("t_null"),
         }
@@ -76,6 +82,24 @@ impl Display for Object {
                 out.push('[');
                 out.push_str(elements.join(", ").as_str());
                 out.push(']');
+
+                write!(f, "{}", out)
+            }
+            Self::Hash(hash) => {
+                let mut out = String::from("");
+                let mut pairs = vec![];
+
+                for (_, pair) in &hash.pairs {
+                    pairs.push(format!(
+                        "{} : {}",
+                        pair.key.to_string().as_str(),
+                        pair.value.to_string().as_str()
+                    ));
+                }
+
+                out.push('{');
+                out.push_str(pairs.join(", ").as_str());
+                out.push('}');
 
                 write!(f, "{}", out)
             }
@@ -140,4 +164,86 @@ pub struct Function {
     pub parameters: Vec<Identifier>,
     pub body: BlockStatement,
     pub env: Environment,
+}
+
+#[derive(PartialEq, Debug, Clone, Eq)]
+pub struct HashKey {
+    pub object_type: String,
+    pub value: i64,
+}
+
+impl Hash for HashKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.object_type.hash(state);
+        self.value.hash(state);
+    }
+}
+
+pub trait Hashable {
+    fn hash_key(&self) -> Result<HashKey, String>;
+}
+
+impl Hashable for Object {
+    fn hash_key(&self) -> Result<HashKey, String> {
+        match &self {
+            Object::Boolean(val) => {
+                let value = if *val { 1 } else { 0 };
+                Ok(HashKey {
+                    object_type: self.object_type(),
+                    value: value,
+                })
+            }
+            Object::Integer(val) => Ok(HashKey {
+                object_type: self.object_type(),
+                value: *val,
+            }),
+            Object::String(string) => {
+                let mut hasher = DefaultHasher::new();
+                string.hash(&mut hasher);
+
+                Ok(HashKey {
+                    object_type: self.object_type(),
+                    value: hasher.finish() as i64,
+                })
+            }
+            other => Err(String::from(format!(
+                "cannot hash type {}",
+                other.object_type().as_str(),
+            ))),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct HashMapObject {
+    pub key: Object,
+    pub value: Object,
+}
+
+#[derive(Clone, Debug)]
+pub struct HashStruct {
+    pub pairs: HashMap<HashKey, HashMapObject>,
+}
+
+#[cfg(test)]
+mod test {
+    use super::{Hashable, Object};
+
+    #[test]
+    fn test_string_hash_key() {
+        let hello1 = Object::String("Hello World".to_string());
+        let hello2 = Object::String("Hello World".to_string());
+        let some_other = Object::String("Some Other".to_string());
+
+        assert_eq!(
+            hello1.hash_key(),
+            hello2.hash_key(),
+            "strings with same content have different hash keys"
+        );
+        assert_ne!(
+            hello1.hash_key(),
+            some_other.hash_key(),
+            "strings with different content have same hash keys"
+        );
+    }
 }

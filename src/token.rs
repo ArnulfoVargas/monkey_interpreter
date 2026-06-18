@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-#[derive(PartialEq, Debug, Default, Clone)]
+#[derive(PartialEq, Debug, Default, Clone, Eq, Hash)]
 pub struct Token {
     pub kind: TokenKind,
     pub literal: String,
@@ -30,10 +30,10 @@ pub enum TokenKind {
     Comma,
     Semicolon,
 
-    Lparen,
-    Rparen,
-    Lbraces,
-    Rbraces,
+    LParen,
+    RParen,
+    LBrace,
+    RBrace,
 
     Function,
     Let,
@@ -46,6 +46,7 @@ pub enum TokenKind {
     String,
     LBracket,
     RBracket,
+    Colon,
 
     Exit,
 }
@@ -60,12 +61,12 @@ impl Display for TokenKind {
             TokenKind::Ident => write!(f, "Ident"),
             TokenKind::Illegal => write!(f, "Ilegal"),
             TokenKind::Int => write!(f, "Int"),
-            TokenKind::Lbraces => write!(f, "{{"),
+            TokenKind::LBrace => write!(f, "{{"),
             TokenKind::Let => write!(f, "let"),
-            TokenKind::Lparen => write!(f, ")"),
+            TokenKind::LParen => write!(f, ")"),
             TokenKind::Plus => write!(f, "+"),
-            TokenKind::Rbraces => write!(f, "}}"),
-            TokenKind::Rparen => write!(f, ")"),
+            TokenKind::RBrace => write!(f, "}}"),
+            TokenKind::RParen => write!(f, ")"),
             TokenKind::Semicolon => write!(f, ";"),
             TokenKind::Minus => write!(f, "-"),
             TokenKind::Bang => write!(f, "!"),
@@ -83,6 +84,7 @@ impl Display for TokenKind {
             TokenKind::String => write!(f, "String"),
             TokenKind::LBracket => write!(f, "["),
             TokenKind::RBracket => write!(f, "]"),
+            TokenKind::Colon => write!(f, ":"),
 
             TokenKind::Exit => write!(f, "\0"),
         }

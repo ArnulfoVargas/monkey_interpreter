@@ -29,6 +29,7 @@ pub enum ExpressionNode {
     Reassign(ReassignLiteral),
     Array(ArrayLiteral),
     Index(IndexExpression),
+    Hash(HashLiteral),
 }
 
 impl Node for StatementNode {
@@ -66,6 +67,7 @@ impl Node for ExpressionNode {
             Self::Reassign(ident) => ident.token_literal(),
             Self::Array(ident) => ident.token_literal(),
             Self::Index(ident) => ident.token_literal(),
+            Self::Hash(ident) => ident.token_literal(),
             Self::NONE => String::from(""),
         }
     }
@@ -84,6 +86,7 @@ impl Node for ExpressionNode {
             Self::Reassign(ident) => ident.print_string(),
             Self::Array(ident) => ident.print_string(),
             Self::Index(ident) => ident.print_string(),
+            Self::Hash(ident) => ident.print_string(),
             Self::NONE => String::from(""),
         }
     }
@@ -190,7 +193,7 @@ impl Node for ReturnStatement {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct ExpressionStatement {
     pub token: Token,
     pub expression: Option<ExpressionNode>,
@@ -226,7 +229,7 @@ impl Node for IntegerLiteral {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct PrefixExpression {
     pub token: Token,
     pub operator: String,
@@ -250,7 +253,7 @@ impl Node for PrefixExpression {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct InfixExpression {
     pub token: Token,
     pub left: Box<ExpressionNode>,
@@ -292,7 +295,7 @@ impl Node for Boolean {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct IfExpression {
     pub token: Token,
     pub condition: Box<ExpressionNode>,
@@ -300,7 +303,7 @@ pub struct IfExpression {
     pub alternative: Option<BlockStatement>,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct BlockStatement {
     pub token: Token,
     pub statements: Vec<StatementNode>,
@@ -436,7 +439,7 @@ impl Node for ReassignLiteral {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ArrayLiteral {
     pub token: Token,
     pub elements: Vec<ExpressionNode>,
@@ -463,7 +466,7 @@ impl Node for ArrayLiteral {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct IndexExpression {
     pub token: Token,
     pub left: Box<ExpressionNode>,
@@ -483,6 +486,37 @@ impl Node for IndexExpression {
         out.push_str("[");
         out.push_str(self.index.print_string().as_str());
         out.push_str("])");
+
+        out
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct HashLiteral {
+    pub token: Token,
+    pub pairs: Vec<(ExpressionNode, ExpressionNode)>,
+}
+
+impl Node for HashLiteral {
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    fn print_string(&self) -> String {
+        let mut out = String::from("");
+        let mut pairs = vec![];
+
+        for (key, value) in &self.pairs {
+            pairs.push(format!(
+                "{} : {}",
+                key.print_string().as_str(),
+                value.print_string().as_str()
+            ));
+        }
+
+        out.push('{');
+        out.push_str(pairs.join(", ").as_str());
+        out.push('}');
 
         out
     }

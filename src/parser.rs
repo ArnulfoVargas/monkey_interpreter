@@ -4,9 +4,9 @@ use crate::{
     ast::{
         ArrayLiteral, BlockStatement, Boolean, CallExpression,
         ExpressionNode::{self},
-        ExpressionStatement, FunctionLiteral, Identifier, IfExpression, IndexExpression,
-        InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, Program, ReassignLiteral,
-        ReturnStatement, StatementNode, StringLiteral,
+        ExpressionStatement, FunctionLiteral, HashLiteral, Identifier, IfExpression,
+        IndexExpression, InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, Program,
+        ReassignLiteral, ReturnStatement, StatementNode, StringLiteral,
     },
     lexer::Lexer,
     token::{
@@ -42,7 +42,7 @@ fn precedence_map(kind: &TokenKind) -> PrecedenceLevel {
         TokenKind::Minus => PrecedenceLevel::Sum,
         TokenKind::Asterisk => PrecedenceLevel::Product,
         TokenKind::Slash => PrecedenceLevel::Product,
-        TokenKind::Lparen => PrecedenceLevel::Call,
+        TokenKind::LParen => PrecedenceLevel::Call,
         TokenKind::LBracket => PrecedenceLevel::Index,
         _ => PrecedenceLevel::Lowest,
     };
@@ -74,11 +74,12 @@ impl Parser {
         parser.register_prefix(TokenKind::Minus, Self::parse_prefix_expression);
         parser.register_prefix(TokenKind::True, Self::parse_boolean);
         parser.register_prefix(TokenKind::False, Self::parse_boolean);
-        parser.register_prefix(TokenKind::Lparen, Self::parse_grouped_expression);
+        parser.register_prefix(TokenKind::LParen, Self::parse_grouped_expression);
         parser.register_prefix(TokenKind::If, Self::parse_if_expression);
         parser.register_prefix(TokenKind::Function, Self::parse_function_literal);
         parser.register_prefix(TokenKind::String, Self::parse_string_literal);
         parser.register_prefix(TokenKind::LBracket, Self::parse_array_literal);
+        parser.register_prefix(TokenKind::LBrace, Self::parse_hash_literal);
 
         parser.register_infix(TokenKind::Plus, Self::parse_infix_expression);
         parser.register_infix(TokenKind::Minus, Self::parse_infix_expression);
@@ -88,7 +89,7 @@ impl Parser {
         parser.register_infix(TokenKind::LessThan, Self::parse_infix_expression);
         parser.register_infix(TokenKind::Equal, Self::parse_infix_expression);
         parser.register_infix(TokenKind::NotEqual, Self::parse_infix_expression);
-        parser.register_infix(TokenKind::Lparen, Self::parse_call_expression);
+        parser.register_infix(TokenKind::LParen, Self::parse_call_expression);
         parser.register_infix(TokenKind::Assign, Self::parse_assignment_literal);
         parser.register_infix(TokenKind::LBracket, Self::parse_index_expression);
 
@@ -190,7 +191,7 @@ impl Parser {
         self.next_token();
 
         let exp = self.parse_expression(PrecedenceLevel::Lowest);
-        if !self.expect_peek(TokenKind::Rparen) {
+        if !self.expect_peek(TokenKind::RParen) {
             return None;
         }
 
@@ -205,7 +206,7 @@ impl Parser {
             alternative: None,
         };
 
-        if !self.expect_peek(TokenKind::Lparen) {
+        if !self.expect_peek(TokenKind::LParen) {
             return None;
         }
 
@@ -215,11 +216,11 @@ impl Parser {
                 .expect("error parsing condition"),
         );
 
-        if !self.expect_peek(TokenKind::Rparen) {
+        if !self.expect_peek(TokenKind::RParen) {
             return None;
         }
 
-        if !self.expect_peek(TokenKind::Lbraces) {
+        if !self.expect_peek(TokenKind::LBrace) {
             return None;
         }
 
@@ -228,7 +229,7 @@ impl Parser {
         if self.peek_token_is(TokenKind::Else) {
             self.next_token();
 
-            if !self.expect_peek(TokenKind::Lbraces) {
+            if !self.expect_peek(TokenKind::LBrace) {
                 return None;
             }
 
@@ -246,7 +247,7 @@ impl Parser {
 
         self.next_token();
 
-        while !self.current_token_is(TokenKind::Rbraces) && !self.current_token_is(TokenKind::Eof) {
+        while !self.current_token_is(TokenKind::RBrace) && !self.current_token_is(TokenKind::Eof) {
             let stmt = self.parse_statement();
 
             if let Some(stm) = stmt {
@@ -265,7 +266,7 @@ impl Parser {
             body: Default::default(),
         };
 
-        if !self.expect_peek(TokenKind::Lparen) {
+        if !self.expect_peek(TokenKind::LParen) {
             return None;
         }
 
@@ -273,7 +274,7 @@ impl Parser {
             .parse_function_parameters()
             .expect("error parsing parameters");
 
-        if !self.expect_peek(TokenKind::Lbraces) {
+        if !self.expect_peek(TokenKind::LBrace) {
             return None;
         }
 
@@ -285,7 +286,7 @@ impl Parser {
     fn parse_function_parameters(&mut self) -> Option<Vec<Identifier>> {
         let mut params = vec![];
 
-        if self.peek_token_is(TokenKind::Rparen) {
+        if self.peek_token_is(TokenKind::RParen) {
             self.next_token();
             return Some(params);
         }
@@ -309,7 +310,7 @@ impl Parser {
             params.push(id);
         }
 
-        if !self.expect_peek(TokenKind::Rparen) {
+        if !self.expect_peek(TokenKind::RParen) {
             return None;
         }
 
@@ -325,7 +326,7 @@ impl Parser {
             arguments: vec![],
         };
 
-        exp.arguments = self.parse_expression_list(TokenKind::Rparen);
+        exp.arguments = self.parse_expression_list(TokenKind::RParen);
 
         Some(ExpressionNode::Call(exp))
     }
@@ -396,6 +397,42 @@ impl Parser {
         }
 
         Some(ExpressionNode::Index(exp))
+    }
+
+    fn parse_hash_literal(&mut self) -> Option<ExpressionNode> {
+        let mut hash = HashLiteral {
+            token: self.current_token.clone(),
+            pairs: Default::default(),
+        };
+
+        while !self.peek_token_is(TokenKind::RBrace) {
+            self.next_token();
+            let key = self
+                .parse_expression(PrecedenceLevel::Lowest)
+                .expect("error parsing key expression");
+
+            if !self.expect_peek(TokenKind::Colon) {
+                return None;
+            }
+
+            self.next_token();
+
+            let value = self
+                .parse_expression(PrecedenceLevel::Lowest)
+                .expect("error parsing value expression");
+
+            hash.pairs.push((key, value));
+
+            if !self.peek_token_is(TokenKind::RBrace) && !self.expect_peek(TokenKind::Comma) {
+                return None;
+            }
+        }
+
+        if !self.expect_peek(TokenKind::RBrace) {
+            return None;
+        }
+
+        Some(ExpressionNode::Hash(hash))
     }
 
     fn next_token(&mut self) {
@@ -1538,5 +1575,118 @@ mod test {
             }
             other => panic!("not an expression statement. got={:?}", other),
         }
+    }
+
+    #[test]
+    fn test_parsing_hash_literals_string_keys() {
+        let input = r#"{"one": 1, "two": 2, "three": 3}"#;
+
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+        check_parser_errors(parser);
+
+        match &program.unwrap().statements[0] {
+            StatementNode::Expression(stmt) => {
+                match &stmt.expression.as_ref().expect("error parsing expression") {
+                    ExpressionNode::Hash(hash) => {
+                        assert_eq!(
+                            hash.pairs.len(),
+                            3,
+                            "hash pairs has wrong length. got = {}",
+                            hash.pairs.len()
+                        );
+
+                        let expected = vec![
+                            ("one".to_string(), 1),
+                            ("two".to_string(), 2),
+                            ("three".to_string(), 3),
+                        ];
+
+                        let mut idx: usize = 0;
+
+                        for (_, value) in &hash.pairs {
+                            let (_, exp_value) = expected[idx];
+                            test_integer_literal(value, exp_value);
+                            idx += 1;
+                        }
+                    }
+                    other => panic!("not an hash literal. got = {:?}", other),
+                }
+            }
+            other => panic!("not an expression statement. got = {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parsing_empty_hash_literal() {
+        let input = "{}";
+
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+        check_parser_errors(parser);
+
+        match &program.unwrap().statements[0] {
+            StatementNode::Expression(stmt) => {
+                match &stmt.expression.as_ref().expect("error parsing expression") {
+                    ExpressionNode::Hash(hash) => {
+                        assert_eq!(
+                            hash.pairs.len(),
+                            0,
+                            "hash pairs has wrong length. got = {}",
+                            hash.pairs.len()
+                        );
+                    }
+                    other => panic!("not an hash literal. got = {:?}", other),
+                }
+            }
+            other => panic!("not an expression statement. got = {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parsing_hash_literals_with_expressions() {
+        let input = r#"{"one": 0 + 1, "two": 10 - 8, "three": 15 / 5}"#;
+
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+        check_parser_errors(parser);
+
+        match &program.unwrap().statements[0] {
+            StatementNode::Expression(stmt) => {
+                match &stmt.expression.as_ref().expect("error parsing expression") {
+                    ExpressionNode::Hash(hash) => {
+                        assert_eq!(
+                            hash.pairs.len(),
+                            3,
+                            "hash pairs has wrong length. got={}",
+                            hash.pairs.len()
+                        );
+
+                        let expected = vec![
+                            ("one".to_string(), (0, "+", 1)),
+                            ("two".to_string(), (10, "-", 8)),
+                            ("three".to_string(), (15, "/", 5)),
+                        ];
+
+                        let mut idx: usize = 0;
+
+                        for (_, value) in &hash.pairs {
+                            let (_, (left, operator, right)) = &expected[idx];
+                            test_func_for_key(value, *left, *operator, *right);
+                            idx += 1;
+                        }
+                    }
+                    other => panic!("not an hash literal. got = {:?}", other),
+                }
+            }
+            other => panic!("not an expression statement. got = {:?}", other),
+        }
+    }
+
+    fn test_func_for_key(exp: &ExpressionNode, left: i64, operator: &str, right: i64) {
+        test_infix_expression(exp, Box::new(left), operator.to_string(), Box::new(right));
     }
 }

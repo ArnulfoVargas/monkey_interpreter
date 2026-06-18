@@ -1,8 +1,11 @@
-use std::ops::Deref;
+use std::{collections::HashMap, ops::Deref};
 
 use crate::{
-    ast::{BlockStatement, ExpressionNode, Identifier, IfExpression, Program, StatementNode},
-    object::{Environment, Function, Object},
+    ast::{
+        BlockStatement, ExpressionNode, Identifier, IfExpression, Program,
+        StatementNode::{self, Return},
+    },
+    object::{Environment, Function, HashMapObject, HashStruct, Hashable, Object},
 };
 
 const TRUE: Object = Object::Boolean(true);
@@ -161,6 +164,29 @@ impl Evaluator {
 
                     return self.eval_index_expression(left, index);
                 }
+                ExpressionNode::Hash(hash) => {
+                    let mut pairs = HashMap::new();
+                    for (k, v) in hash.pairs {
+                        let key = self.eval_expression(Some(k));
+                        if Self::is_error(&key) {
+                            return key;
+                        }
+
+                        let hash_key = match key.hash_key() {
+                            Ok(h) => h,
+                            Err(err) => return Object::Error(err),
+                        };
+
+                        let value = self.eval_expression(Some(v));
+                        if Self::is_error(&value) {
+                            return value;
+                        }
+
+                        pairs.insert(hash_key, HashMapObject { key, value });
+                    }
+
+                    Object::Hash(HashStruct { pairs })
+                }
 
                 _ => NULL,
             };
@@ -174,6 +200,9 @@ impl Evaluator {
             (Object::Array(arr), Object::Integer(int)) => {
                 return Self::eval_array_index_expression(arr, int)
             }
+            (Object::Hash(hash), object) => {
+                return Self::eval_hash_index_expression(hash, object);
+            }
             (other, _) => {
                 return Object::Error(format!(
                     "index operator not soported: {}",
@@ -181,6 +210,20 @@ impl Evaluator {
                 ))
             }
         }
+    }
+
+    fn eval_hash_index_expression(hash: HashStruct, object: Object) -> Object {
+        let key = match object.hash_key() {
+            Ok(k) => k,
+            Err(err) => return Object::Error(err),
+        };
+
+        let pair = match hash.pairs.get(&key) {
+            Some(p) => p,
+            None => return NULL,
+        };
+
+        return pair.value.clone();
     }
 
     fn eval_array_index_expression(left: Vec<Object>, idx: i64) -> Object {
@@ -395,7 +438,12 @@ mod text {
     use std::any;
 
     use super::*;
-    use crate::{ast::Node, lexer::Lexer, object::Object, parser::Parser};
+    use crate::{
+        ast::Node,
+        lexer::Lexer,
+        object::{Hashable, Object},
+        parser::Parser,
+    };
 
     #[test]
     fn test_eval_integer_expr() {
@@ -550,6 +598,10 @@ mod text {
             ),
             ("foobar", "identifier not found: foobar"),
             (r#""Hello" - "World""#, "unknown operator: str - str"),
+            (
+                r#"{"name": "Monkey"}[fn(x) { x }];"#,
+                "cannot hash type t_func",
+            ),
         ];
 
         for test in tests {
@@ -823,6 +875,74 @@ mod text {
                     }
                     _ => assert!(false),
                 },
+            }
+        }
+    }
+
+    #[test]
+    fn test_hash_literals() {
+        let input = r#"let two = "two";
+        {
+            "one": 10 - 9,
+            "two": 1 + 1,
+            "thr" + "ee": 6/2,
+            4: 4,
+            true: 5,
+            false: 6,
+        }"#;
+
+        let evaluated = test_eval(input);
+
+        match evaluated {
+            Object::Hash(hash) => {
+                let expected = vec![
+                    (Object::String("one".to_string()).hash_key(), 1),
+                    (Object::String("two".to_string()).hash_key(), 2),
+                    (Object::String("three".to_string()).hash_key(), 3),
+                    (Object::Integer(4).hash_key(), 4),
+                    (TRUE.hash_key(), 5),
+                    (FALSE.hash_key(), 6),
+                ];
+
+                assert_eq!(
+                    hash.pairs.len(),
+                    expected.len(),
+                    "hash object has wrong number of pairs. got = {}, expected = {}",
+                    hash.pairs.len(),
+                    expected.len()
+                );
+
+                for (expected_key, expected_value) in expected {
+                    let pair = match hash.pairs.get(expected_key.as_ref().unwrap()) {
+                        Some(pair) => pair,
+                        None => panic!("no pair for given key in pairs"),
+                    };
+                    test_integer_object(pair.value.clone(), expected_value);
+                }
+            }
+            other => panic!("eval did not return hash obj, got = {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_hash_index_expressions() {
+        let tests: Vec<(&str, Box<dyn any::Any>)> = vec![
+            (r#"{"foo": 5}["foo"]"#, Box::new(5_i64)),
+            (r#"{"foo": 5}["bar"]"#, Box::new(NULL)),
+            (r#"let key = "foo"; {"foo": 5}[key]"#, Box::new(5_i64)),
+            (r#"{}["foo"]"#, Box::new(NULL)),
+            (r#"{5: 5}[5]"#, Box::new(5_i64)),
+            (r#"{true: 5}[true]"#, Box::new(5_i64)),
+            (r#"{false: 5}[false]"#, Box::new(5_i64)),
+        ];
+
+        for test in tests {
+            let (input, data) = test;
+            let evaluated = test_eval(input);
+
+            match data.downcast_ref::<i64>() {
+                Some(expected) => test_integer_object(evaluated, *expected),
+                None => test_null_object(evaluated),
             }
         }
     }
