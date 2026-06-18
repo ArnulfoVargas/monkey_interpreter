@@ -44,6 +44,8 @@ pub enum TokenKind {
     Return,
 
     String,
+    LBracket,
+    RBracket,
 
     Exit,
 }
@@ -79,6 +81,8 @@ impl Display for TokenKind {
             TokenKind::Equal => write!(f, "=="),
             TokenKind::NotEqual => write!(f, "!="),
             TokenKind::String => write!(f, "String"),
+            TokenKind::LBracket => write!(f, "["),
+            TokenKind::RBracket => write!(f, "]"),
 
             TokenKind::Exit => write!(f, "\0"),
         }

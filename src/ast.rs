@@ -26,7 +26,9 @@ pub enum ExpressionNode {
     Funcion(FunctionLiteral),
     Call(CallExpression),
     String(StringLiteral),
-    Reasign(ReasignLiteral),
+    Reassign(ReassignLiteral),
+    Array(ArrayLiteral),
+    Index(IndexExpression),
 }
 
 impl Node for StatementNode {
@@ -61,7 +63,9 @@ impl Node for ExpressionNode {
             Self::Funcion(ident) => ident.token_literal(),
             Self::Call(ident) => ident.token_literal(),
             Self::String(ident) => ident.token_literal(),
-            Self::Reasign(ident) => ident.token_literal(),
+            Self::Reassign(ident) => ident.token_literal(),
+            Self::Array(ident) => ident.token_literal(),
+            Self::Index(ident) => ident.token_literal(),
             Self::NONE => String::from(""),
         }
     }
@@ -77,7 +81,9 @@ impl Node for ExpressionNode {
             Self::Funcion(ident) => ident.print_string(),
             Self::Call(ident) => ident.print_string(),
             Self::String(ident) => ident.print_string(),
-            Self::Reasign(ident) => ident.print_string(),
+            Self::Reassign(ident) => ident.print_string(),
+            Self::Array(ident) => ident.print_string(),
+            Self::Index(ident) => ident.print_string(),
             Self::NONE => String::from(""),
         }
     }
@@ -414,19 +420,71 @@ impl Node for StringLiteral {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct ReasignLiteral {
+pub struct ReassignLiteral {
     pub token: Token,
     pub left: Box<ExpressionNode>,
     pub right: Box<ExpressionNode>,
 }
 
-impl Node for ReasignLiteral {
+impl Node for ReassignLiteral {
     fn token_literal(&self) -> String {
         self.token.literal.clone()
     }
 
     fn print_string(&self) -> String {
         self.token_literal()
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct ArrayLiteral {
+    pub token: Token,
+    pub elements: Vec<ExpressionNode>,
+}
+
+impl Node for ArrayLiteral {
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    fn print_string(&self) -> String {
+        let mut out = String::from("");
+        let mut values = vec![];
+
+        for v in &self.elements {
+            values.push(v.print_string());
+        }
+
+        out.push_str("[");
+        out.push_str(values.join(", ").as_str());
+        out.push_str("]");
+
+        out
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct IndexExpression {
+    pub token: Token,
+    pub left: Box<ExpressionNode>,
+    pub index: Box<ExpressionNode>,
+}
+
+impl Node for IndexExpression {
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    fn print_string(&self) -> String {
+        let mut out = String::from("");
+
+        out.push_str("(");
+        out.push_str(self.left.print_string().as_str());
+        out.push_str("[");
+        out.push_str(self.index.print_string().as_str());
+        out.push_str("])");
+
+        out
     }
 }
 

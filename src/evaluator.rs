@@ -117,7 +117,7 @@ impl Evaluator {
                     self.apply_function(func, args)
                 }
                 ExpressionNode::String(string) => Object::String(string.value),
-                ExpressionNode::Reasign(assign) => {
+                ExpressionNode::Reassign(assign) => {
                     let name = match *assign.left {
                         ExpressionNode::IdentifierNode(ident) => ident.value,
                         other => {
@@ -138,12 +138,59 @@ impl Evaluator {
 
                     value
                 }
+                ExpressionNode::Array(arr) => {
+                    let elements = self.eval_expressions(arr.elements);
+
+                    if elements.len() == 1 && Self::is_error(&elements[0]) {
+                        return elements[0].clone();
+                    }
+
+                    return Object::Array(elements);
+                }
+                ExpressionNode::Index(idx) => {
+                    let left = self.eval_expression(Some(*idx.left));
+                    if Self::is_error(&left) {
+                        return left;
+                    }
+
+                    let index = self.eval_expression(Some(*idx.index));
+
+                    if Self::is_error(&index) {
+                        return index;
+                    }
+
+                    return self.eval_index_expression(left, index);
+                }
 
                 _ => NULL,
             };
         }
 
         Object::Null
+    }
+
+    fn eval_index_expression(&mut self, left: Object, index: Object) -> Object {
+        match (left, index) {
+            (Object::Array(arr), Object::Integer(int)) => {
+                return Self::eval_array_index_expression(arr, int)
+            }
+            (other, _) => {
+                return Object::Error(format!(
+                    "index operator not soported: {}",
+                    other.object_type()
+                ))
+            }
+        }
+    }
+
+    fn eval_array_index_expression(left: Vec<Object>, idx: i64) -> Object {
+        let max = (left.len() - 1) as i64;
+
+        if idx < 0 || idx > max {
+            return Object::Error(String::from("index out of bounds"));
+        }
+
+        return left[idx as usize].clone();
     }
 
     fn apply_function(&mut self, func: Object, args: Vec<Object>) -> Object {
@@ -703,12 +750,76 @@ mod text {
                     Some(expected) => match evaluated {
                         Object::Error(err) => assert_eq!(
                             err, *expected,
-                            "wrong error message. expected={}, got={}",
+                            "wrong error message. expected = {}, got = {}",
                             *expected, err
                         ),
-                        other => panic!("object is not error. got={}", other),
+                        other => panic!("object is not error. got = {}", other),
                     },
                     None => panic!("should not happen"),
+                },
+            }
+        }
+    }
+
+    #[test]
+    fn test_array_literals() {
+        let input = "[1, 2 * 2, 3 + 3]";
+        let evaluated = test_eval(input);
+
+        match evaluated {
+            Object::Array(elements) => {
+                assert_eq!(
+                    elements.len(),
+                    3,
+                    "array has wrong num of elements. got={}",
+                    elements.len()
+                );
+                test_integer_object(elements[0].clone(), 1);
+                test_integer_object(elements[1].clone(), 4);
+                test_integer_object(elements[2].clone(), 6);
+            }
+            other => panic!("object is not array, got={:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_array_index_expressions() {
+        let tests: Vec<(&str, Box<dyn any::Any>)> = vec![
+            ("[1, 2, 3][0]", Box::new(1_i64)),
+            ("[1, 2, 3][1]", Box::new(2_i64)),
+            ("[1, 2, 3][2]", Box::new(3_i64)),
+            ("let i = 0; [1][i];", Box::new(1_i64)),
+            ("[1, 2, 3][1 + 1];", Box::new(3_i64)),
+            ("let myArray = [1, 2, 3]; myArray[2];", Box::new(3_i64)),
+            (
+                "let myArray = [1, 2, 3]; myArray[0] + myArray[1] + myArray[2];",
+                Box::new(6_i64),
+            ),
+            (
+                "let myArray = [1, 2, 3]; let i = myArray[0]; myArray[i]",
+                Box::new(2_i64),
+            ),
+            (
+                "[1, 2, 3][3]",
+                Box::new(Object::Error(String::from("index out of bounds"))),
+            ),
+            (
+                "[1, 2, 3][-1]",
+                Box::new(Object::Error(String::from("index out of bounds"))),
+            ),
+        ];
+
+        for test in tests {
+            let (input, value) = test;
+
+            let evaluated = test_eval(input);
+            match value.downcast_ref::<i64>() {
+                Some(expected) => test_integer_object(evaluated, *expected),
+                None => match evaluated {
+                    Object::Error(s) => {
+                        assert_eq!("index out of bounds", s, "not gettings out of bounds")
+                    }
+                    _ => assert!(false),
                 },
             }
         }
